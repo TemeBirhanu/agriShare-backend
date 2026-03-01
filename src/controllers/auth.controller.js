@@ -1,94 +1,84 @@
+const { ApiError } = require("../utils/ApiError");
+const { ApiResponse } = require("../utils/ApiResponse");
 const User = require("../models/User");
 const { generateToken } = require("../utils/jwt");
+const asyncHandler = require("../utils/asyncHandler").asyncHandler;
 
-exports.register = async (req, res) => {
-  try {
-    const { fullName, phone, email, password, role, nationalId } = req.body;
+const register = asyncHandler(async (req, res) => {
+  const { fullName, phone, email, password, role, nationalId } = req.body;
 
-    if (!fullName || !phone || !email || !password) {
-      return res
-        .status(400)
-        .json({ success: false, message: "All fields are required" });
-    }
-
-    // Check if user exists
-    const existingUser = await User.findOne({ $or: [{ email }, { phone }] });
-    if (existingUser) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Email or phone already in use" });
-    }
-
-    // Create user
-    const user = await User.create({
-      fullName,
-      phone,
-      email,
-      password,
-      role: role || "investor", // default to investor
-      nationalId: role === "farmer" ? nationalId : undefined,
-    });
-
-    const token = generateToken(user);
-
-    res.status(201).json({
-      success: true,
-      message: "User registered successfully",
-      token,
-      user: {
-        id: user._id,
-        fullName: user.fullName,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-      },
-    });
-  } catch (error) {
-    console.error("Register error:", error);
-    res.status(500).json({ success: false, message: "Server error" });
+  if (!fullName || !phone || !email || !password) {
+    throw new ApiError(
+      400,
+      "Full name, phone, email and password are required",
+    );
   }
-};
 
-exports.login = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Email and password required" });
-    }
-
-    const user = await User.findOne({ email }).select("+password");
-    if (!user) {
-      return res
-        .status(401)
-        .json({ success: false, message: "Invalid credentials" });
-    }
-
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res
-        .status(401)
-        .json({ success: false, message: "Invalid credentials" });
-    }
-
-    const token = generateToken(user);
-
-    res.json({
-      success: true,
-      message: "Login successful",
-      token,
-      user: {
-        id: user._id,
-        fullName: user.fullName,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-      },
-    });
-  } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({ success: false, message: "Server error" });
+  const existingUser = await User.findOne({ $or: [{ email }, { phone }] });
+  if (existingUser) {
+    throw new ApiError(400, "Email or phone number already in use");
   }
-};
+
+  const user = await User.create({
+    fullName,
+    phone,
+    email,
+    password,
+    role: role || "investor",
+    nationalId: role === "farmer" ? nationalId : undefined,
+  });
+
+  const token = generateToken(user);
+
+  const userData = {
+    id: user._id,
+    fullName: user.fullName,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+  };
+
+  return res
+    .status(201)
+    .json(
+      new ApiResponse(
+        201,
+        { token, user: userData },
+        "User registered successfully",
+      ),
+    );
+});
+
+const login = asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    throw new ApiError(400, "Email and password are required");
+  }
+
+  const user = await User.findOne({ email }).select("+password");
+  if (!user) {
+    throw new ApiError(401, "Invalid credentials");
+  }
+
+  const isMatch = await user.comparePassword(password);
+  if (!isMatch) {
+    throw new ApiError(401, "Invalid credentials");
+  }
+
+  const token = generateToken(user);
+
+  const userData = {
+    id: user._id,
+    fullName: user.fullName,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+  };
+
+  return res.json(
+    new ApiResponse(200, { token, user: userData }, "Login successful"),
+  );
+});
+
+module.exports = { register, login };

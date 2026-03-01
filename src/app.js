@@ -8,6 +8,7 @@ dotenv.config();
 
 const connectDB = require("./config/db.config");
 const authRoutes = require("./routes/auth.routes");
+const errorHandler = require("./middlewares/error.middleware");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -38,10 +39,7 @@ app.use((req, res) => {
 });
 
 // Global error handler
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ success: false, message: "Something went wrong!" });
-});
+app.use(errorHandler);
 
 const startServer = async () => {
   await connectDB();
