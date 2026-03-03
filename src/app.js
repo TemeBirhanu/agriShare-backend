@@ -10,6 +10,7 @@ const connectDB = require("./config/db.config");
 const authRoutes = require("./routes/auth.routes");
 const errorHandler = require("./middlewares/error.middleware");
 const userRoutes = require("./routes/user.routes");
+const assetRoutes = require("./routes/asset.routes");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -23,6 +24,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/assets", assetRoutes);
 
 // Health check
 app.get("/", (req, res) => {
