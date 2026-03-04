@@ -12,6 +12,8 @@ import errorHandler from "./middlewares/error.middleware.js";
 import userRoutes from "./routes/user.routes.js";
 import assetRoutes from "./routes/asset.routes.js";
 import listingRoutes from "./routes/listing.routes.js";
+import investmentRoutes from "./routes/investment.routes.js";
+import distributionRoutes from "./routes/distribution.routes.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -27,6 +29,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/assets", assetRoutes);
 app.use("/api/listings", listingRoutes);
+app.use("/api/investments", investmentRoutes);
+app.use("/api/distributions", distributionRoutes);
 
 // Health check
 app.get("/", (req, res) => {
