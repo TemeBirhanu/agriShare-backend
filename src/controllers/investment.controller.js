@@ -3,6 +3,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import Listing from "../models/Listing.js";
 import { buyShares, getAvailableShares } from "../services/token.service.js";
+import InvestmentContract from "../models/InvestmentContract.js";
 
 export const buyInvestmentShares = asyncHandler(async (req, res) => {
   if (req.user.role !== "investor") {
@@ -21,13 +22,26 @@ export const buyInvestmentShares = asyncHandler(async (req, res) => {
   const result = await buyShares(listingId, req.user._id, sharesToBuy);
 
   // Mock success message (later: real tx hash)
+
+  const contract = await InvestmentContract.create({
+    listing: listing._id,
+    investor: req.user._id,
+    farmer: listing.farmer,
+    sharesPurchased: sharesToBuy,
+    amountPaidBirr: sharesToBuy * listing.sharePricePerTokenBirr,
+    // pdfUrl: await generatePdf(...)  ← later
+  });
+
+  // Return in response
   return res.json(
     new ApiResponse(
       200,
       {
         ...result,
         costBirr: sharesToBuy * listing.sharePricePerTokenBirr,
-        message: "Shares purchased (mock blockchain transfer)",
+        contractNumber: contract.contractNumber,
+        contractId: contract._id,
+        message: "Shares purchased & investment contract created",
       },
       "Investment successful",
     ),
