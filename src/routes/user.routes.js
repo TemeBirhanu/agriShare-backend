@@ -2,6 +2,7 @@ import express from "express";
 import { protect, restrictTo } from "../middlewares/auth.middleware.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import { getAllUsers } from "../controllers/user.controller.js";
 
 const router = express.Router();
 
@@ -39,20 +40,12 @@ router.get(
   }),
 );
 
-// admin-only route example
+// admin-only route
 router.get(
   "/admin/users",
   protect,
   restrictTo("admin"),
-  asyncHandler(async (req, res) => {
-    res.json(
-      new ApiResponse(
-        200,
-        { message: "Admin panel - list of users (placeholder)" },
-        "Admin access granted",
-      ),
-    );
-  }),
+  getAllUsers
 );
 
 export default router;
