@@ -2,7 +2,7 @@ import express from "express";
 import { protect, restrictTo } from "../middlewares/auth.middleware.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { getAllUsers } from "../controllers/user.controller.js";
+import { getAllUsers, getFarmerDashboard } from "../controllers/user.controller.js";
 
 const router = express.Router();
 
@@ -20,24 +20,12 @@ router.get(
   }),
 );
 
-// farmer-only route example
+// farmer-only route
 router.get(
   "/farmer/dashboard",
   protect,
   restrictTo("farmer"),
-  asyncHandler(async (req, res) => {
-    res.json(
-      new ApiResponse(
-        200,
-        {
-          message: "Welcome to Farmer Dashboard",
-          userRole: req.user.role,
-          canListAssets: true,
-        },
-        "Farmer dashboard data",
-      ),
-    );
-  }),
+  getFarmerDashboard
 );
 
 // admin-only route
