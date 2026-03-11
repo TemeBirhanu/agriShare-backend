@@ -10,8 +10,22 @@ const createAsset = asyncHandler(async (req, res) => {
     throw new ApiError(403, "Only farmers can create assets");
   }
 
+  // Extract uploaded files
+  const photos = req.files?.photos?.map((file) => ({
+    url: file.path,
+    description: "Uploaded photo",
+  })) || [];
+
+  const documents = req.files?.documents?.map((file) => ({
+    type: "uploaded_document",
+    url: file.path,
+    originalName: file.originalname,
+  })) || [];
+
   const assetData = {
     ...req.body,
+    photos: photos.length > 0 ? photos : req.body.photos,
+    documents: documents.length > 0 ? documents : req.body.documents,
     farmer: req.user._id,
     status: "pending",
   };
