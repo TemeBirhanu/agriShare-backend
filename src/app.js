@@ -14,6 +14,7 @@ import assetRoutes from "./routes/asset.routes.js";
 import listingRoutes from "./routes/listing.routes.js";
 import investmentRoutes from "./routes/investment.routes.js";
 import distributionRoutes from "./routes/distribution.routes.js";
+import creditsRoutes from "./routes/credits.routes.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -31,6 +32,7 @@ app.use("/api/assets", assetRoutes);
 app.use("/api/listings", listingRoutes);
 app.use("/api/investments", investmentRoutes);
 app.use("/api/distributions", distributionRoutes);
+app.use("/api/credits", creditsRoutes);
 
 // Health check
 app.get("/", (req, res) => {
