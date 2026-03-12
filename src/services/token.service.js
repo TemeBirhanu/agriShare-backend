@@ -69,9 +69,26 @@ async function getAllHolders(listingId) {
 }
 
 // Burn all shares after distribution (mock close)
-async function burnAllShares(listingId) {
-  await ShareOwnership.deleteMany({ listing: listingId });
-  // In real: call ERC-20 burnFrom each holder or batch burn
+async function closeSharesAfterDistribution(listingId, distributionMap) {
+  const updates = Object.entries(distributionMap).map(
+    ([investorId, amount]) => ({
+      updateOne: {
+        filter: { listing: listingId, investor: investorId },
+        update: {
+          $set: {
+            status: "completed",
+            distributedAmountBirr: amount,
+          },
+        },
+      },
+    }),
+  );
+
+  if (updates.length > 0) {
+    await ShareOwnership.bulkWrite(updates);
+  }
+
+  // In real blockchain later: burn or lock tokens here
 }
 
 // For future real blockchain: just replace these functions with ethers calls
@@ -83,5 +100,5 @@ export {
   buyShares,
   getInvestorShares,
   getAllHolders,
-  burnAllShares,
+  closeSharesAfterDistribution,
 };

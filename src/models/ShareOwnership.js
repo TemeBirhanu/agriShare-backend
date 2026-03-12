@@ -18,17 +18,27 @@ const shareOwnershipSchema = new Schema(
       type: Number,
       required: true,
       min: 0,
-      default: 0,
     },
     purchasedAt: {
       type: Date,
       default: Date.now,
     },
+    status: {
+      type: String,
+      enum: ["active", "completed"],
+      default: "active",
+      index: true,
+    },
+    distributedAmountBirr: {
+      type: Number,
+      default: 0,
+    },
+    // simple ROI tracking (can calculate later if needed)
+    roiPercent: { type: Number, default: 0 },
   },
   { timestamps: true },
 );
 
-// Compound index for fast queries
 shareOwnershipSchema.index({ listing: 1, investor: 1 }, { unique: true });
 
 export default mongoose.model("ShareOwnership", shareOwnershipSchema);

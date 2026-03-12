@@ -3,6 +3,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import Asset from "../models/Asset.js";
 import Listing from "../models/Listing.js";
+import { addCredits, deductCredits } from "../services/agriCredits.service.js";
 
 export const createListing = asyncHandler(async (req, res) => {
   if (req.user.role !== "farmer") {
@@ -32,28 +33,59 @@ export const createListing = asyncHandler(async (req, res) => {
 
   // Calculate price per share token (100 total shares)
   const sharesToSell = Math.round(100 * (sharesToSellPercent / 100));
+  if (sharesToSell <= 0) {
+    throw new ApiError(400, "Invalid shares to sell percent");
+  }
   const sharePrice = investmentGoalBirr / sharesToSell;
 
-  const listing = await Listing.create({
-    asset: asset._id,
-    farmer: req.user._id,
-    investmentGoalBirr,
-    sharesToSellPercent,
-    expectedTotalYieldBirr,
-    paydayDate: new Date(paydayDate),
-    minSharesPerInvestor,
-    sharePricePerTokenBirr: sharePrice,
-    // shareTokenAddress: 'pending deploy...',   // later real address after ERC-20 deployment
-  });
+  await deductCredits(
+    req.user._id,
+    20,
+    "deduction_listing",
+    `Listing new asset: ${asset.name || "unnamed"}`,
+    asset._id,
+    "Asset",
+  );
 
-  // Mock for now - in real - deploy ERC-20 & transfer fractions
-  listing.shareTokenAddress = "0xMockShareTokenAddressForTesting";
-  listing.shareTokenSymbol = `YS-${asset._id.toString().slice(-6)}`;
-  await listing.save();
+  let listing;
 
-  asset.currentListing = listing._id;
-  asset.status = "listed";
-  await asset.save();
+  try {
+    listing = await Listing.create({
+      asset: asset._id,
+      farmer: req.user._id,
+      investmentGoalBirr,
+      sharesToSellPercent,
+      expectedTotalYieldBirr,
+      paydayDate: new Date(paydayDate),
+      minSharesPerInvestor,
+      sharePricePerTokenBirr: sharePrice,
+      // shareTokenAddress: 'pending deploy...',   // later real address after ERC-20 deployment
+    });
+
+    // Mock for now - in real - deploy ERC-20 & transfer fractions
+    listing.shareTokenAddress = "0xMockShareTokenAddressForTesting";
+    listing.shareTokenSymbol = `YS-${asset._id.toString().slice(-6)}`;
+    await listing.save();
+
+    asset.currentListing = listing._id;
+    asset.status = "listed";
+    await asset.save();
+  } catch (err) {
+    if (listing?._id) {
+      await Listing.findByIdAndDelete(listing._id).catch(() => null);
+    }
+
+    await addCredits(
+      req.user._id,
+      20,
+      "refund_listing",
+      "Refund: listing creation failed",
+      asset._id,
+      "Asset",
+    ).catch(() => null);
+
+    throw err;
+  }
 
   return res
     .status(201)
@@ -112,4 +144,3 @@ export const getListingById = asyncHandler(async (req, res) => {
     new ApiResponse(200, { listing }, "Listing details retrieved"),
   );
 });
-

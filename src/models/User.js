@@ -1,7 +1,8 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
+const Schema = mongoose.Schema;
 
-const userSchema = new mongoose.Schema(
+const userSchema = new Schema(
   {
     fullName: {
       type: String,
@@ -51,6 +52,22 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+
+    agriCreditsBalance: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    lastMonthlyCreditReset: {
+      type: Date,
+      default: null,
+    },
+    agriCreditsHistory: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "CreditTransaction",
+      },
+    ],
     createdAt: {
       type: Date,
       default: Date.now,

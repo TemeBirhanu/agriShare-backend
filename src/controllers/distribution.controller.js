@@ -2,9 +2,11 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import Listing from "../models/Listing.js";
-import Asset from "../models/Asset.js";
 import User from "../models/User.js";
-import { getAllHolders, burnAllShares } from "../services/token.service.js";
+import {
+  getAllHolders,
+  closeSharesAfterDistribution,
+} from "../services/token.service.js";
 
 export const distributeProfits = asyncHandler(async (req, res) => {
   if (req.user.role !== "farmer") {
@@ -39,6 +41,7 @@ export const distributeProfits = asyncHandler(async (req, res) => {
     listing.expectedTotalYieldBirr * (listing.sharesToSellPercent / 100);
 
   let totalDistributed = 0;
+  const distributionMap = {};
 
   for (const holder of investorHolders) {
     const proportion = holder.shares / listing.totalShares; // e.g. 0.15 if 15 shares
@@ -49,6 +52,7 @@ export const distributeProfits = asyncHandler(async (req, res) => {
       $inc: { walletBalance: amount },
     });
 
+    distributionMap[holder.investor._id.toString()] = amount;
     totalDistributed += amount;
   }
 
@@ -62,7 +66,7 @@ export const distributeProfits = asyncHandler(async (req, res) => {
   await listing.save();
 
   // Mock burn
-  await burnAllShares(listingId);
+  await closeSharesAfterDistribution(listingId, distributionMap);
 
   // In real: call ERC-20 burn / batch burn
 

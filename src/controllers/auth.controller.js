@@ -3,6 +3,10 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import User from "../models/User.js";
 import { generateToken } from "../utils/jwt.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import {
+  grantSignupBonus,
+  grantMonthlyCredits,
+} from "../services/agriCredits.service.js";
 
 export const register = asyncHandler(async (req, res) => {
   const { fullName, phone, email, password, role, nationalId } = req.body;
@@ -27,6 +31,12 @@ export const register = asyncHandler(async (req, res) => {
     role: role || "investor",
     nationalId: role === "farmer" ? nationalId : undefined,
   });
+
+  // Grant signup + monthly AgriCredits bonus
+  if (role === "farmer") {
+    await grantSignupBonus(user._id);
+    await grantMonthlyCredits(user._id);
+  }
 
   const token = generateToken(user);
 
@@ -75,6 +85,11 @@ export const login = asyncHandler(async (req, res) => {
     phone: user.phone,
     role: user.role,
   };
+
+  // grant monthly credits if eligible (call on login to ensure regular check)
+  if (user.role === "farmer") {
+    await grantMonthlyCredits(user._id);
+  }
 
   return res.json(
     new ApiResponse(200, { token, user: userData }, "Login successful"),
