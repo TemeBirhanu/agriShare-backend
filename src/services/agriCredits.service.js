@@ -6,6 +6,13 @@ const MONTHLY_FREE = 40;
 const SIGNUP_BONUS = 60;
 const MAX_ROLLOVER = 120;
 
+// buy bundles (later with payment integration)
+export const BUNDLES = {
+  starter: { credits: 50, priceBirr: 70, name: "Starter Bundle" },
+  pro: { credits: 200, priceBirr: 250, name: "Pro Farmer Bundle" },
+  mega: { credits: 500, priceBirr: 600, name: "Mega Bundle" },
+};
+
 // Grant monthly credits (call via cron or on login)
 export async function grantMonthlyCredits(userId) {
   const user = await User.findById(userId);
@@ -150,5 +157,48 @@ export async function getBalance(userId) {
   return {
     balance: user.agriCreditsBalance,
     nextMonthlyReset: nextReset.toISOString().split("T")[0],
+  };
+}
+
+export async function purchaseBundle(userId, bundleKey) {
+  const bundle = BUNDLES[bundleKey];
+  if (!bundle) throw new ApiError(400, "Invalid bundle");
+
+  const user = await User.findById(userId);
+  if (!user) throw new ApiError(404, "User not found");
+
+  // Check wallet balance
+  if (user.walletBalance < bundle.priceBirr) {
+    throw new ApiError(
+      402,
+      `Insufficient wallet balance. You have ${user.walletBalance} Birr, need ${bundle.priceBirr} Birr`,
+    );
+  }
+
+  // Deduct from wallet
+  user.walletBalance -= bundle.priceBirr;
+
+  // Add credits
+  const newCredits = user.agriCreditsBalance + bundle.credits;
+  user.agriCreditsBalance = newCredits;
+
+  await user.save();
+
+  // Log credit transaction
+  await CreditTransaction.create({
+    user: user._id,
+    type: "purchase",
+    amount: bundle.credits,
+    balanceAfter: newCredits,
+    description: `${bundle.name} purchased (${bundle.credits} credits for ${bundle.priceBirr} Birr)`,
+  });
+
+  return {
+    success: true,
+    bundle: bundle.name,
+    creditsAdded: bundle.credits,
+    pricePaid: bundle.priceBirr,
+    newCreditsBalance: newCredits,
+    newWalletBalance: user.walletBalance,
   };
 }

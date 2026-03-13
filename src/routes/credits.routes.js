@@ -5,6 +5,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { getBalance } from "../services/agriCredits.service.js";
 import CreditTransaction from "../models/CreditTransaction.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import { buyBundle } from "../controllers/credits.controller.js";
 
 router.get(
   "/balance",
@@ -27,6 +28,6 @@ router.get(
   }),
 );
 
-// TODO: POST /buy (purchase bundle) – later with payment gateway
+router.post("/buy", protect, restrictTo("farmer"), asyncHandler(buyBundle));
 
 export default router;
