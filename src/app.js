@@ -15,6 +15,7 @@ import listingRoutes from "./routes/listing.routes.js";
 import investmentRoutes from "./routes/investment.routes.js";
 import distributionRoutes from "./routes/distribution.routes.js";
 import creditsRoutes from "./routes/credits.routes.js";
+import farmerVerificationRoutes from "./routes/farmerVerification.routes.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -33,6 +34,7 @@ app.use("/api/listings", listingRoutes);
 app.use("/api/investments", investmentRoutes);
 app.use("/api/distributions", distributionRoutes);
 app.use("/api/credits", creditsRoutes);
+app.use("/api/farmer-verifications", farmerVerificationRoutes);
 
 // Health check
 app.get("/", (req, res) => {

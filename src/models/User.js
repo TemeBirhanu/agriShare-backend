@@ -38,14 +38,6 @@ const userSchema = new Schema(
       enum: ["farmer", "investor", "admin"],
       default: "investor",
     },
-    nationalId: {
-      type: String,
-      required: function () {
-        return this.role === "farmer";
-      }, // farmers need ID
-      unique: true,
-      sparse: true, // allows null for non-farmers
-    },
     region: {
       type: String,
       trim: true,
@@ -85,6 +77,18 @@ const userSchema = new Schema(
     isVerified: {
       type: Boolean,
       default: false,
+    },
+    verificationStatus: {
+      type: String,
+      enum: ["unverified", "pending", "verified", "rejected"],
+      default: function () {
+        return this.role === "farmer" ? "unverified" : "verified";
+      },
+    },
+    verificationRejectionReason: {
+      type: String,
+      trim: true,
+      maxlength: 500,
     },
     walletBalance: {
       type: Number,

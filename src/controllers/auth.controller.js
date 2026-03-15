@@ -16,7 +16,6 @@ export const register = asyncHandler(async (req, res) => {
     email,
     password,
     role,
-    nationalId,
     region,
     zone,
     woreda,
@@ -24,7 +23,7 @@ export const register = asyncHandler(async (req, res) => {
     bio,
   } = req.body;
 
-  const selectedRole = (role || "investor").toLowerCase();
+  const selectedRole = String(role || "investor").toLowerCase();
 
   if (!firstName || !lastName || !phone || !email || !password) {
     throw new ApiError(
@@ -42,22 +41,19 @@ export const register = asyncHandler(async (req, res) => {
 
   if (
     selectedRole === "farmer" &&
-    [nationalId, region, zone, woreda, kebele].some(isBlank)
+    [region, zone, woreda, kebele].some(isBlank)
   ) {
     throw new ApiError(
       400,
-      "National ID, region, zone, woreda and kebele are required for farmer accounts",
+      "Region, zone, woreda and kebele are required for farmer accounts",
     );
   }
 
   const existingUser = await User.findOne({
-    $or: [{ email }, { phone }, ...(nationalId ? [{ nationalId }] : [])],
+    $or: [{ email }, { phone }],
   });
   if (existingUser) {
-    throw new ApiError(
-      400,
-      "Email, phone number or national ID already in use",
-    );
+    throw new ApiError(400, "Email or phone number already in use");
   }
 
   const user = await User.create({
@@ -67,12 +63,13 @@ export const register = asyncHandler(async (req, res) => {
     email,
     password,
     role: selectedRole,
-    nationalId: selectedRole === "farmer" ? nationalId?.trim() : undefined,
     region: selectedRole === "farmer" ? region?.trim() : undefined,
     zone: selectedRole === "farmer" ? zone?.trim() : undefined,
     woreda: selectedRole === "farmer" ? woreda?.trim() : undefined,
     kebele: selectedRole === "farmer" ? kebele?.trim() : undefined,
     bio: bio?.trim() || undefined,
+    verificationStatus: selectedRole === "farmer" ? "unverified" : "verified",
+    isVerified: selectedRole !== "farmer",
   });
 
   // Grant signup + monthly AgriCredits bonus
@@ -94,6 +91,8 @@ export const register = asyncHandler(async (req, res) => {
     woreda: user.woreda,
     kebele: user.kebele,
     bio: user.bio,
+    verificationStatus: user.verificationStatus,
+    verificationRejectionReason: user.verificationRejectionReason,
   };
 
   return res
@@ -132,6 +131,8 @@ export const login = asyncHandler(async (req, res) => {
     email: user.email,
     phone: user.phone,
     role: user.role,
+    verificationStatus: user.verificationStatus,
+    verificationRejectionReason: user.verificationRejectionReason,
   };
 
   // grant monthly credits if eligible (call on login to ensure regular check)
