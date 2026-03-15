@@ -10,6 +10,13 @@ export const createListing = asyncHandler(async (req, res) => {
     throw new ApiError(403, "Only farmers can list assets");
   }
 
+  if (req.user.verificationStatus !== "verified") {
+    throw new ApiError(
+      403,
+      "Farmer account must be verified before listing assets",
+    );
+  }
+
   const {
     assetId,
     investmentGoalBirr,

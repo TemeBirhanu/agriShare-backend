@@ -4,9 +4,14 @@ const Schema = mongoose.Schema;
 
 const userSchema = new Schema(
   {
-    fullName: {
+    firstName: {
       type: String,
-      required: [true, "Full name is required"],
+      required: [true, "First name is required"],
+      trim: true,
+    },
+    lastName: {
+      type: String,
+      required: [true, "Last name is required"],
       trim: true,
     },
     phone: {
@@ -33,13 +38,38 @@ const userSchema = new Schema(
       enum: ["farmer", "investor", "admin"],
       default: "investor",
     },
-    nationalId: {
+    region: {
       type: String,
+      trim: true,
       required: function () {
         return this.role === "farmer";
-      }, // farmers need ID
-      unique: true,
-      sparse: true, // allows null for non-farmers
+      },
+    },
+    zone: {
+      type: String,
+      trim: true,
+      required: function () {
+        return this.role === "farmer";
+      },
+    },
+    woreda: {
+      type: String,
+      trim: true,
+      required: function () {
+        return this.role === "farmer";
+      },
+    },
+    kebele: {
+      type: String,
+      trim: true,
+      required: function () {
+        return this.role === "farmer";
+      },
+    },
+    bio: {
+      type: String,
+      trim: true,
+      maxlength: 600,
     },
     profilePicture: {
       type: String,
@@ -47,6 +77,18 @@ const userSchema = new Schema(
     isVerified: {
       type: Boolean,
       default: false,
+    },
+    verificationStatus: {
+      type: String,
+      enum: ["unverified", "pending", "verified", "rejected"],
+      default: function () {
+        return this.role === "farmer" ? "unverified" : "verified";
+      },
+    },
+    verificationRejectionReason: {
+      type: String,
+      trim: true,
+      maxlength: 500,
     },
     walletBalance: {
       type: Number,
