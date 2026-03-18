@@ -74,6 +74,15 @@ const userSchema = new Schema(
     profilePicture: {
       type: String,
     },
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+    deactivatedAt: {
+      type: Date,
+      default: null,
+    },
     isVerified: {
       type: Boolean,
       default: false,

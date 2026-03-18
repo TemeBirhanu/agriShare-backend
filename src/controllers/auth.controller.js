@@ -28,6 +28,8 @@ const buildUserData = (user) => ({
   woreda: user.woreda,
   kebele: user.kebele,
   bio: user.bio,
+  isActive: user.isActive,
+  deactivatedAt: user.deactivatedAt,
   isVerified: user.isVerified,
   verificationStatus: user.verificationStatus,
   verificationRejectionReason: user.verificationRejectionReason,
@@ -181,6 +183,10 @@ export const login = asyncHandler(async (req, res) => {
     throw new ApiError(401, "Invalid credentials");
   }
 
+  if (!user.isActive) {
+    throw new ApiError(403, "Account is inactive. Please contact support");
+  }
+
   const isMatch = await user.comparePassword(password);
   if (!isMatch) {
     throw new ApiError(401, "Invalid credentials");
@@ -233,6 +239,10 @@ export const verifyInvestorEmailOtp = asyncHandler(async (req, res) => {
 
   if (!user) {
     throw new ApiError(404, "Investor account not found");
+  }
+
+  if (!user.isActive) {
+    throw new ApiError(403, "Account is inactive. Please contact support");
   }
 
   if (user.isVerified && user.verificationStatus === "verified") {
@@ -304,6 +314,10 @@ export const resendInvestorEmailOtp = asyncHandler(async (req, res) => {
 
   if (!user) {
     throw new ApiError(404, "Investor account not found");
+  }
+
+  if (!user.isActive) {
+    throw new ApiError(403, "Account is inactive. Please contact support");
   }
 
   if (user.isVerified && user.verificationStatus === "verified") {
