@@ -1,6 +1,10 @@
 import express from "express";
 const router = express.Router();
-import { protect, restrictTo } from "../middlewares/auth.middleware.js";
+import {
+  protect,
+  restrictTo,
+  requireVerifiedInvestor,
+} from "../middlewares/auth.middleware.js";
 import {
   buyInvestmentShares,
   getMyActiveInvestments,
@@ -14,6 +18,7 @@ router.post(
   "/buy",
   protect,
   restrictTo("investor"),
+  requireVerifiedInvestor,
   asyncHandler(buyInvestmentShares),
 );
 
@@ -24,11 +29,18 @@ router.get(
   "/my-active",
   protect,
   restrictTo("investor"),
+  requireVerifiedInvestor,
   getMyActiveInvestments,
 );
 
 // My investment history (completed)
-router.get("/my-history", protect, restrictTo("investor"), getMyHistory);
+router.get(
+  "/my-history",
+  protect,
+  restrictTo("investor"),
+  requireVerifiedInvestor,
+  getMyHistory,
+);
 
 // Farmer: all investments in my listings
 router.get(

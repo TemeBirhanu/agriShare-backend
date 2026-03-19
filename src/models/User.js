@@ -74,6 +74,15 @@ const userSchema = new Schema(
     profilePicture: {
       type: String,
     },
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+    deactivatedAt: {
+      type: Date,
+      default: null,
+    },
     isVerified: {
       type: Boolean,
       default: false,
@@ -82,8 +91,26 @@ const userSchema = new Schema(
       type: String,
       enum: ["unverified", "pending", "verified", "rejected"],
       default: function () {
-        return this.role === "farmer" ? "unverified" : "verified";
+        return this.role === "admin" ? "verified" : "unverified";
       },
+    },
+    emailVerificationCodeHash: {
+      type: String,
+      default: null,
+      select: false,
+    },
+    emailVerificationCodeExpiresAt: {
+      type: Date,
+      default: null,
+    },
+    emailVerificationLastSentAt: {
+      type: Date,
+      default: null,
+    },
+    emailVerificationAttemptCount: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     verificationRejectionReason: {
       type: String,
