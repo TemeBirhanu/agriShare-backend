@@ -3,6 +3,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import Asset from "../models/Asset.js";
 import Listing from "../models/Listing.js";
+import ListingUpdate from "../models/ListingUpdate.js";
 import { addCredits, deductCredits } from "../services/agriCredits.service.js";
 
 export const createListing = asyncHandler(async (req, res) => {
@@ -105,6 +106,7 @@ export const createListing = asyncHandler(async (req, res) => {
   );
 
   let listing;
+  let initialListingUpdate;
 
   try {
     listing = await Listing.create({
@@ -123,6 +125,15 @@ export const createListing = asyncHandler(async (req, res) => {
       // shareTokenAddress: 'pending deploy...',   // later real address after ERC-20 deployment
     });
 
+    initialListingUpdate = await ListingUpdate.create({
+      listing: listing._id,
+      farmer: req.user._id,
+      title: "Listing launched for investment",
+      body: "Listing launched for investment",
+      postedAt: new Date(),
+      isSystem: true,
+    });
+
     // Mock for now - in real - deploy ERC-20 & transfer fractions
     listing.shareTokenAddress = "0xMockShareTokenAddressForTesting";
     listing.shareTokenSymbol = `YS-${asset._id.toString().slice(-6)}`;
@@ -132,6 +143,12 @@ export const createListing = asyncHandler(async (req, res) => {
     asset.status = "listed";
     await asset.save();
   } catch (err) {
+    if (initialListingUpdate?._id) {
+      await ListingUpdate.findByIdAndDelete(initialListingUpdate._id).catch(
+        () => null,
+      );
+    }
+
     if (listing?._id) {
       await Listing.findByIdAndDelete(listing._id).catch(() => null);
     }
