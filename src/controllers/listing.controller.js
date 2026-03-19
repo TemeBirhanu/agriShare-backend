@@ -24,7 +24,57 @@ export const createListing = asyncHandler(async (req, res) => {
     expectedTotalYieldBirr,
     paydayDate,
     minSharesPerInvestor = 1,
+    pitchTitle,
+    pitchText,
+    useOfFunds,
+    riskFactors,
   } = req.body;
+
+  const normalizedPitchTitle =
+    typeof pitchTitle === "string" ? pitchTitle.trim() : "";
+  const normalizedPitchText =
+    typeof pitchText === "string" ? pitchText.trim() : "";
+  const normalizedUseOfFunds =
+    typeof useOfFunds === "string" ? useOfFunds.trim() : "";
+  const normalizedRiskFactors =
+    typeof riskFactors === "string" ? riskFactors.trim() : "";
+
+  if (!normalizedPitchTitle) {
+    throw new ApiError(400, "pitchTitle is required");
+  }
+  if (normalizedPitchTitle.length < 10 || normalizedPitchTitle.length > 120) {
+    throw new ApiError(400, "pitchTitle must be between 10 and 120 characters");
+  }
+
+  if (!normalizedPitchText) {
+    throw new ApiError(400, "pitchText is required");
+  }
+  if (normalizedPitchText.length < 50 || normalizedPitchText.length > 3000) {
+    throw new ApiError(400, "pitchText must be between 50 and 3000 characters");
+  }
+
+  if (!normalizedUseOfFunds) {
+    throw new ApiError(400, "useOfFunds is required");
+  }
+  if (normalizedUseOfFunds.length < 30 || normalizedUseOfFunds.length > 2000) {
+    throw new ApiError(
+      400,
+      "useOfFunds must be between 30 and 2000 characters",
+    );
+  }
+
+  if (!normalizedRiskFactors) {
+    throw new ApiError(400, "riskFactors is required");
+  }
+  if (
+    normalizedRiskFactors.length < 30 ||
+    normalizedRiskFactors.length > 2000
+  ) {
+    throw new ApiError(
+      400,
+      "riskFactors must be between 30 and 2000 characters",
+    );
+  }
 
   const asset = await Asset.findById(assetId);
   if (!asset) throw new ApiError(404, "Asset not found");
@@ -63,6 +113,10 @@ export const createListing = asyncHandler(async (req, res) => {
       investmentGoalBirr,
       sharesToSellPercent,
       expectedTotalYieldBirr,
+      pitchTitle: normalizedPitchTitle,
+      pitchText: normalizedPitchText,
+      useOfFunds: normalizedUseOfFunds,
+      riskFactors: normalizedRiskFactors,
       paydayDate: new Date(paydayDate),
       minSharesPerInvestor,
       sharePricePerTokenBirr: sharePrice,
