@@ -52,16 +52,14 @@ const investmentContractSchema = new Schema(
   { timestamps: true },
 );
 
-investmentContractSchema.pre("save", async function (next) {
+investmentContractSchema.pre("save", async function () {
   if (this.isNew) {
-    // Simple auto-increment contract number (e.g. AGR-2026-0001)
     const last = await this.constructor.findOne().sort({ signedAt: -1 });
     const seq = last ? parseInt(last.contractNumber.split("-")[2]) + 1 : 1;
     this.contractNumber = `AGR-${new Date().getFullYear()}-${seq
       .toString()
       .padStart(4, "0")}`;
   }
-  next();
 });
 
 export default mongoose.model("InvestmentContract", investmentContractSchema);
