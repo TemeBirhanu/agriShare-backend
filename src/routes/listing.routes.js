@@ -13,6 +13,12 @@ import {
   updateListingUpdate,
   deleteListingUpdate,
 } from "../controllers/listingUpdate.controller.js";
+import {
+  createReview,
+  getListingReviews,
+  updateReview,
+  deleteReview,
+} from "../controllers/review.controller.js";
 import { upload } from "../middlewares/upload.middleware.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
@@ -45,6 +51,23 @@ router.delete(
   restrictTo("farmer"),
   deleteListingUpdate,
 );
+
+// Reviews
+router.post("/:id/reviews", protect, restrictTo("investor"), createReview);
+router.get("/:id/reviews", protect, getListingReviews);
+router.patch(
+  "/:id/reviews/:reviewId",
+  protect,
+  restrictTo("investor"),
+  updateReview,
+);
+router.delete(
+  "/:id/reviews/:reviewId",
+  protect,
+  restrictTo("investor"),
+  deleteReview,
+);
+
 router.get("/:id", protect, asyncHandler(getListingById));
 
 export default router;

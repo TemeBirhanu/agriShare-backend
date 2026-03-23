@@ -59,3 +59,131 @@ Farmers can publish chronological listing updates (title, body, images, posted d
 
 - **DELETE** `/api/listings/:id/updates/:updateId`
 - Auth: `Bearer <token>`
+
+---
+
+## Listing Reviews API
+
+Investors who have purchased shares in a listing can post one text review per listing. All authenticated users can read reviews.
+
+### Behavior
+
+- Only investors who hold an investment contract for the listing can post a review.
+- Each investor is limited to **one review per listing**. Attempting to submit a second review returns `409 Conflict`.
+- Investors can edit and delete only their own reviews.
+- Reviews are returned in **chronological order** (oldest first) with page-based pagination.
+- Any authenticated user (farmer, investor, admin) can read reviews.
+
+### Endpoints
+
+#### 1) Post a review (investor only – must have invested)
+
+- **POST** `/api/listings/:id/reviews`
+- Auth: `Bearer <token>` (investor role required)
+- Content-Type: `application/json`
+- Body:
+  ```json
+  {
+    "body": "I invested in this farmland because the soil quality reports were impressive and the farmer has a strong track record."
+  }
+  ```
+- Success `201`:
+  ```json
+  {
+    "statusCode": 201,
+    "data": {
+      "review": {
+        "_id": "<reviewId>",
+        "listing": "<listingId>",
+        "investor": { "_id": "<userId>", "fullName": "Abebe Kebede", "profilePicture": null },
+        "body": "I invested in this farmland because ...",
+        "createdAt": "2026-03-21T10:00:00.000Z",
+        "updatedAt": "2026-03-21T10:00:00.000Z"
+      }
+    },
+    "message": "Review posted successfully"
+  }
+  ```
+
+#### 2) Get reviews for a listing (all authenticated users)
+
+- **GET** `/api/listings/:id/reviews?page=1&limit=10`
+- Auth: `Bearer <token>`
+- Query params: `page` (default 1), `limit` (default 10, max 50)
+- Returns reviews in chronological order (oldest first).
+- Success `200`:
+  ```json
+  {
+    "statusCode": 200,
+    "data": {
+      "reviews": [
+        {
+          "_id": "<reviewId>",
+          "listing": "<listingId>",
+          "investor": { "_id": "<userId>", "fullName": "Abebe Kebede", "profilePicture": null },
+          "body": "I invested in this farmland because ...",
+          "createdAt": "2026-03-21T10:00:00.000Z",
+          "updatedAt": "2026-03-21T10:00:00.000Z"
+        }
+      ],
+      "pagination": {
+        "page": 1,
+        "limit": 10,
+        "total": 1,
+        "totalPages": 1,
+        "hasMore": false
+      }
+    },
+    "message": "Reviews retrieved successfully"
+  }
+  ```
+
+#### 3) Edit a review (investor owner only)
+
+- **PATCH** `/api/listings/:id/reviews/:reviewId`
+- Auth: `Bearer <token>` (must be the investor who created the review)
+- Content-Type: `application/json`
+- Body:
+  ```json
+  {
+    "body": "Updated review: after receiving my first yield distribution I am even more confident in this investment."
+  }
+  ```
+- Success `200`:
+  ```json
+  {
+    "statusCode": 200,
+    "data": {
+      "review": {
+        "_id": "<reviewId>",
+        "body": "Updated review: ...",
+        "updatedAt": "2026-03-21T11:00:00.000Z"
+      }
+    },
+    "message": "Review updated successfully"
+  }
+  ```
+
+#### 4) Delete a review (investor owner only)
+
+- **DELETE** `/api/listings/:id/reviews/:reviewId`
+- Auth: `Bearer <token>` (must be the investor who created the review)
+- Success `200`:
+  ```json
+  {
+    "statusCode": 200,
+    "data": { "deleted": true },
+    "message": "Review deleted successfully"
+  }
+  ```
+
+### Error Responses
+
+| Status | Message |
+|--------|---------|
+| `403` | Only investors can post reviews |
+| `403` | You can only review listings that you have invested in |
+| `403` | You can only edit/delete your own reviews |
+| `404` | Listing not found |
+| `404` | Review not found |
+| `409` | You have already submitted a review for this listing |
