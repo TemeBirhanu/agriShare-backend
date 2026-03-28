@@ -25,9 +25,17 @@ const protect = asyncHandler(async (req, res, next) => {
       throw new ApiError(401, "User not found");
     }
 
+    if (!user.isActive) {
+      throw new ApiError(403, "Account is inactive. Please contact support");
+    }
+
     req.user = user;
     next();
   } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
     if (error.name === "TokenExpiredError") {
       throw new ApiError(401, "Token has expired");
     }
@@ -47,4 +55,23 @@ const restrictTo = (...roles) => {
   };
 };
 
-export { protect, restrictTo };
+const requireVerifiedInvestor = (req, res, next) => {
+  if (!req.user || req.user.role !== "investor") {
+    throw new ApiError(403, "Only investors can access this resource");
+  }
+
+  if (!req.user.isActive) {
+    throw new ApiError(403, "Account is inactive. Please contact support");
+  }
+
+  if (!req.user.isVerified || req.user.verificationStatus !== "verified") {
+    throw new ApiError(
+      403,
+      "Investor email is not verified. Please verify before continuing",
+    );
+  }
+
+  next();
+};
+
+export { protect, restrictTo, requireVerifiedInvestor };
