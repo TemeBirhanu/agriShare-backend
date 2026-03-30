@@ -25,7 +25,7 @@ const shareOwnershipSchema = new Schema(
     },
     status: {
       type: String,
-      enum: ["active", "completed"],
+      enum: ["active", "completed", "refunded"],
       default: "active",
       index: true,
     },
@@ -35,6 +35,10 @@ const shareOwnershipSchema = new Schema(
     },
     // simple ROI tracking (can calculate later if needed)
     roiPercent: { type: Number, default: 0 },
+    refundedAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true },
 );

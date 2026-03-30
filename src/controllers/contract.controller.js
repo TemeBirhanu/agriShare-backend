@@ -9,7 +9,17 @@ export const getInvestmentContracts = asyncHandler(async (req, res) => {
       : { investor: req.user._id };
 
   const contracts = await InvestmentContract.find(query)
-    .populate("listing asset investor farmer", "name type fullName")
+    .populate({
+      path: "listing",
+      select:
+        "investmentGoalBirr totalInvestedBirr investmentDeadline payoutMode effectivePaydayDate status",
+      populate: {
+        path: "asset",
+        select: "name type",
+      },
+    })
+    .populate("investor", "fullName email")
+    .populate("farmer", "fullName email")
     .sort({ signedAt: -1 });
 
   res.json(

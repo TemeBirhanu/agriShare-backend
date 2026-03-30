@@ -6,14 +6,30 @@ import { ApiError } from "../utils/ApiError.js";
 const TOTAL_SUPPLY = 100;
 
 // Get current available shares for sale (not yet bought)
-async function getAvailableShares(listingId) {
+async function getAvailableShares(listingId, session = null) {
   const bought = await ShareOwnership.aggregate([
-    { $match: { listing: listingId } },
+    { $match: { listing: listingId, status: "active" } },
     { $group: { _id: null, total: { $sum: "$shares" } } },
-  ]);
+  ]).session(session);
 
   const totalBought = bought[0]?.total || 0;
   return TOTAL_SUPPLY - totalBought;
+}
+
+async function upsertShareOwnership(
+  listingId,
+  investorId,
+  sharesToBuy,
+  session = null,
+) {
+  return ShareOwnership.findOneAndUpdate(
+    { listing: listingId, investor: investorId },
+    {
+      $inc: { shares: sharesToBuy },
+      $set: { purchasedAt: new Date(), status: "active" },
+    },
+    { upsert: true, new: true, session },
+  );
 }
 
 // Buy shares (mock transfer)
@@ -38,11 +54,7 @@ async function buyShares(listingId, investorId, sharesToBuy) {
   }
 
   // Upsert investor balance
-  await ShareOwnership.findOneAndUpdate(
-    { listing: listingId, investor: investorId },
-    { $inc: { shares: sharesToBuy }, purchasedAt: new Date() },
-    { upsert: true, new: true },
-  );
+  await upsertShareOwnership(listingId, investorId, sharesToBuy);
 
   return {
     success: true,
@@ -97,6 +109,7 @@ async function closeSharesAfterDistribution(listingId, distributionMap) {
 export {
   TOTAL_SUPPLY,
   getAvailableShares,
+  upsertShareOwnership,
   buyShares,
   getInvestorShares,
   getAllHolders,

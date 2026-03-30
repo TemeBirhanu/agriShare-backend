@@ -121,6 +121,11 @@ const userSchema = new Schema(
       type: Number,
       default: 0,
     },
+    fundWalletBalance: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
 
     agriCreditsBalance: {
       type: Number,

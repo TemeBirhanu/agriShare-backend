@@ -15,8 +15,16 @@ const listingSchema = new Schema(
     },
     status: {
       type: String,
-      enum: ["active", "funded", "completed", "cancelled"],
+      enum: [
+        "active",
+        "funded",
+        "completed",
+        "cancelled",
+        "failed",
+        "refunded",
+      ],
       default: "active",
+      index: true,
     },
     investmentGoalBirr: {
       type: Number,
@@ -62,9 +70,53 @@ const listingSchema = new Schema(
       minlength: 30,
       maxlength: 2000,
     },
-    paydayDate: {
+    investmentDeadline: {
       type: Date,
       required: true,
+      index: true,
+    },
+    totalInvestedBirr: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    payoutMode: {
+      type: String,
+      enum: ["fixed", "offset"],
+      default: "fixed",
+    },
+    payoffDaysFromRelease: {
+      type: Number,
+      min: 1,
+      default: null,
+    },
+    paydayDate: {
+      type: Date,
+      required: function () {
+        return this.payoutMode === "fixed";
+      },
+    },
+    effectivePaydayDate: {
+      type: Date,
+      default: null,
+    },
+    fundingGoalReachedAt: {
+      type: Date,
+      default: null,
+    },
+    releasedToFarmerAt: {
+      type: Date,
+      default: null,
+    },
+    refundedAt: {
+      type: Date,
+      default: null,
+    },
+    refundReason: {
+      type: String,
+      trim: true,
+      maxlength: 300,
+      default: null,
     },
     minSharesPerInvestor: {
       type: Number,
@@ -89,5 +141,7 @@ const listingSchema = new Schema(
   },
   { timestamps: true },
 );
+
+listingSchema.index({ status: 1, investmentDeadline: 1 });
 
 export default mongoose.model("Listing", listingSchema);

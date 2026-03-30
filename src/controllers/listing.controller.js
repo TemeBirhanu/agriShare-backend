@@ -1,10 +1,36 @@
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import mongoose from "mongoose";
 import Asset from "../models/Asset.js";
 import Listing from "../models/Listing.js";
 import ListingUpdate from "../models/ListingUpdate.js";
+import ShareOwnership from "../models/ShareOwnership.js";
+import InvestmentContract from "../models/InvestmentContract.js";
 import { addCredits, deductCredits } from "../services/agriCredits.service.js";
+
+const roundBirr = (value) =>
+  Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+
+const getFundingMetrics = (listingDoc) => {
+  const listing =
+    typeof listingDoc.toObject === "function"
+      ? listingDoc.toObject()
+      : { ...listingDoc };
+
+  const goal = Number(listing.investmentGoalBirr || 0);
+  const invested = Number(listing.totalInvestedBirr || 0);
+  const progressPercent = goal > 0 ? Math.min((invested / goal) * 100, 100) : 0;
+
+  return {
+    ...listing,
+    investmentProgressPercent: Number(progressPercent.toFixed(2)),
+    fundingRemainingBirr: Number(Math.max(goal - invested, 0).toFixed(2)),
+    isDeadlinePassed: listing.investmentDeadline
+      ? new Date() > new Date(listing.investmentDeadline)
+      : false,
+  };
+};
 
 export const createListing = asyncHandler(async (req, res) => {
   if (req.user.role !== "farmer") {
@@ -23,6 +49,9 @@ export const createListing = asyncHandler(async (req, res) => {
     investmentGoalBirr,
     sharesToSellPercent,
     expectedTotalYieldBirr,
+    investmentDeadline,
+    payoutMode = "fixed",
+    payoffDaysFromRelease,
     paydayDate,
     minSharesPerInvestor = 1,
     pitchTitle,
@@ -39,6 +68,53 @@ export const createListing = asyncHandler(async (req, res) => {
     typeof useOfFunds === "string" ? useOfFunds.trim() : "";
   const normalizedRiskFactors =
     typeof riskFactors === "string" ? riskFactors.trim() : "";
+  const normalizedPayoutMode =
+    typeof payoutMode === "string" ? payoutMode.trim().toLowerCase() : "fixed";
+
+  if (!["fixed", "offset"].includes(normalizedPayoutMode)) {
+    throw new ApiError(400, 'payoutMode must be either "fixed" or "offset"');
+  }
+
+  const parsedInvestmentDeadline = new Date(investmentDeadline);
+  if (!investmentDeadline || Number.isNaN(parsedInvestmentDeadline.getTime())) {
+    throw new ApiError(
+      400,
+      "investmentDeadline is required and must be a valid date",
+    );
+  }
+
+  if (parsedInvestmentDeadline <= new Date()) {
+    throw new ApiError(400, "investmentDeadline must be in the future");
+  }
+
+  let parsedPaydayDate = null;
+  let normalizedPayoffDaysFromRelease = null;
+
+  if (normalizedPayoutMode === "fixed") {
+    parsedPaydayDate = new Date(paydayDate);
+    if (!paydayDate || Number.isNaN(parsedPaydayDate.getTime())) {
+      throw new ApiError(
+        400,
+        "paydayDate is required when payoutMode is fixed",
+      );
+    }
+
+    if (parsedPaydayDate <= parsedInvestmentDeadline) {
+      throw new ApiError(
+        400,
+        "paydayDate must be after investmentDeadline when payoutMode is fixed",
+      );
+    }
+  } else {
+    const parsedDays = Number.parseInt(payoffDaysFromRelease, 10);
+    if (Number.isNaN(parsedDays) || parsedDays < 1) {
+      throw new ApiError(
+        400,
+        "payoffDaysFromRelease is required and must be at least 1 when payoutMode is offset",
+      );
+    }
+    normalizedPayoffDaysFromRelease = parsedDays;
+  }
 
   if (!normalizedPitchTitle) {
     throw new ApiError(400, "pitchTitle is required");
@@ -119,9 +195,15 @@ export const createListing = asyncHandler(async (req, res) => {
       pitchText: normalizedPitchText,
       useOfFunds: normalizedUseOfFunds,
       riskFactors: normalizedRiskFactors,
-      paydayDate: new Date(paydayDate),
+      investmentDeadline: parsedInvestmentDeadline,
+      payoutMode: normalizedPayoutMode,
+      payoffDaysFromRelease: normalizedPayoffDaysFromRelease,
+      paydayDate: parsedPaydayDate,
+      effectivePaydayDate:
+        normalizedPayoutMode === "fixed" ? parsedPaydayDate : null,
       minSharesPerInvestor,
       sharePricePerTokenBirr: sharePrice,
+      totalInvestedBirr: 0,
       // shareTokenAddress: 'pending deploy...',   // later real address after ERC-20 deployment
     });
 
@@ -170,7 +252,7 @@ export const createListing = asyncHandler(async (req, res) => {
     .json(
       new ApiResponse(
         201,
-        { listing },
+        { listing: getFundingMetrics(listing) },
         "Asset listed for investment successfully",
       ),
     );
@@ -182,11 +264,30 @@ export const getActiveListings = asyncHandler(async (req, res) => {
     .populate("farmer", "fullName profilePicture")
     .sort({ createdAt: -1 });
 
+  const listingsWithFunding = listings.map(getFundingMetrics);
+
   return res.json(
     new ApiResponse(
       200,
-      { listings, count: listings.length },
+      { listings: listingsWithFunding, count: listingsWithFunding.length },
       "Active listings retrieved",
+    ),
+  );
+});
+
+export const getAllListings = asyncHandler(async (req, res) => {
+  const listings = await Listing.find()
+    .populate("asset")
+    .populate("farmer", "fullName profilePicture")
+    .sort({ createdAt: -1 });
+
+  const listingsWithFunding = listings.map(getFundingMetrics);
+
+  return res.json(
+    new ApiResponse(
+      200,
+      { listings: listingsWithFunding, count: listingsWithFunding.length },
+      "All listings retrieved",
     ),
   );
 });
@@ -200,16 +301,22 @@ export const getMyListings = asyncHandler(async (req, res) => {
     .populate("asset")
     .sort({ createdAt: -1 });
 
+  const listingsWithFunding = listings.map(getFundingMetrics);
+
   return res.json(
     new ApiResponse(
       200,
-      { listings, count: listings.length },
+      { listings: listingsWithFunding, count: listingsWithFunding.length },
       "Your listings retrieved",
     ),
   );
 });
 
 export const getListingById = asyncHandler(async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    throw new ApiError(400, "Invalid listing id");
+  }
+
   const listing = await Listing.findById(req.params.id)
     .populate("asset")
     .populate("farmer", "fullName phone profilePicture");
@@ -219,6 +326,165 @@ export const getListingById = asyncHandler(async (req, res) => {
   }
 
   return res.json(
-    new ApiResponse(200, { listing }, "Listing details retrieved"),
+    new ApiResponse(
+      200,
+      { listing: getFundingMetrics(listing) },
+      "Listing details retrieved",
+    ),
+  );
+});
+
+export const getListingInvestors = asyncHandler(async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    throw new ApiError(400, "Invalid listing id");
+  }
+
+  const listing = await Listing.findById(req.params.id).select(
+    "farmer sharePricePerTokenBirr status investmentGoalBirr totalInvestedBirr",
+  );
+
+  if (!listing) {
+    throw new ApiError(404, "Listing not found");
+  }
+
+  if (
+    req.user.role === "farmer" &&
+    listing.farmer.toString() !== req.user._id.toString()
+  ) {
+    throw new ApiError(
+      403,
+      "You can only view investors for your own listings",
+    );
+  }
+
+  const [ownershipRecords, contractStats] = await Promise.all([
+    ShareOwnership.find({ listing: listing._id })
+      .populate(
+        "investor",
+        "firstName lastName fullName email phone profilePicture isVerified verificationStatus",
+      )
+      .sort({ purchasedAt: -1 }),
+    InvestmentContract.aggregate([
+      {
+        $match: {
+          listing: listing._id,
+        },
+      },
+      {
+        $group: {
+          _id: "$investor",
+          purchaseCount: { $sum: 1 },
+          totalSharesPurchased: { $sum: "$sharesPurchased" },
+          totalAmountPaidBirr: { $sum: "$amountPaidBirr" },
+          refundedAmountBirr: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "refunded"] }, "$amountPaidBirr", 0],
+            },
+          },
+          lastPurchasedAt: { $max: "$signedAt" },
+        },
+      },
+    ]),
+  ]);
+
+  const contractStatsByInvestorId = new Map(
+    contractStats.map((item) => [item._id.toString(), item]),
+  );
+
+  const investors = ownershipRecords.map((record) => {
+    const investor = record.investor;
+    const investorId = investor?._id?.toString() || record.investor.toString();
+    const stats = contractStatsByInvestorId.get(investorId);
+
+    const totalSharesPurchased = Number(
+      stats?.totalSharesPurchased ?? record.shares ?? 0,
+    );
+    const totalAmountPaidBirr = roundBirr(
+      stats?.totalAmountPaidBirr ??
+        Number(record.shares || 0) *
+          Number(listing.sharePricePerTokenBirr || 0),
+    );
+    const refundedAmountBirr = roundBirr(stats?.refundedAmountBirr ?? 0);
+
+    return {
+      investor: {
+        id: investor?._id || record.investor,
+        firstName: investor?.firstName,
+        lastName: investor?.lastName,
+        fullName:
+          investor?.fullName ||
+          [investor?.firstName, investor?.lastName].filter(Boolean).join(" "),
+        email: investor?.email,
+        phone: investor?.phone,
+        profilePicture: investor?.profilePicture,
+        isVerified: investor?.isVerified,
+        verificationStatus: investor?.verificationStatus,
+      },
+      purchaseCount: Number(stats?.purchaseCount || 0),
+      totalSharesPurchased,
+      currentOwnedShares: Number(record.shares || 0),
+      totalAmountPaidBirr,
+      refundedAmountBirr,
+      netInvestedBirr: roundBirr(totalAmountPaidBirr - refundedAmountBirr),
+      estimatedCurrentValueBirr: roundBirr(
+        Number(record.shares || 0) *
+          Number(listing.sharePricePerTokenBirr || 0),
+      ),
+      distributedAmountBirr: roundBirr(
+        Number(record.distributedAmountBirr || 0),
+      ),
+      ownershipStatus: record.status,
+      purchasedAt: record.purchasedAt,
+      lastPurchasedAt: stats?.lastPurchasedAt || record.purchasedAt,
+      ownershipUpdatedAt: record.updatedAt,
+    };
+  });
+
+  const totals = investors.reduce(
+    (acc, item) => {
+      acc.totalInvestors += 1;
+      acc.totalCurrentOwnedShares += Number(item.currentOwnedShares || 0);
+      acc.totalSharesPurchased += Number(item.totalSharesPurchased || 0);
+      acc.totalAmountPaidBirr = roundBirr(
+        Number(acc.totalAmountPaidBirr || 0) +
+          Number(item.totalAmountPaidBirr || 0),
+      );
+      acc.totalRefundedAmountBirr = roundBirr(
+        Number(acc.totalRefundedAmountBirr || 0) +
+          Number(item.refundedAmountBirr || 0),
+      );
+      acc.totalNetInvestedBirr = roundBirr(
+        Number(acc.totalNetInvestedBirr || 0) +
+          Number(item.netInvestedBirr || 0),
+      );
+      return acc;
+    },
+    {
+      totalInvestors: 0,
+      totalCurrentOwnedShares: 0,
+      totalSharesPurchased: 0,
+      totalAmountPaidBirr: 0,
+      totalRefundedAmountBirr: 0,
+      totalNetInvestedBirr: 0,
+    },
+  );
+
+  return res.json(
+    new ApiResponse(
+      200,
+      {
+        listing: {
+          id: listing._id,
+          status: listing.status,
+          farmer: listing.farmer,
+          sharePricePerTokenBirr: listing.sharePricePerTokenBirr,
+          investmentGoalBirr: listing.investmentGoalBirr,
+          totalInvestedBirr: listing.totalInvestedBirr,
+        },
+        investors,
+        totals,
+      },
+      "Listing investors retrieved",
+    ),
   );
 });

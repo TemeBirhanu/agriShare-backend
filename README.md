@@ -95,7 +95,11 @@ Investors who have purchased shares in a listing can post one text review per li
       "review": {
         "_id": "<reviewId>",
         "listing": "<listingId>",
-        "investor": { "_id": "<userId>", "fullName": "Abebe Kebede", "profilePicture": null },
+        "investor": {
+          "_id": "<userId>",
+          "fullName": "Abebe Kebede",
+          "profilePicture": null
+        },
         "body": "I invested in this farmland because ...",
         "createdAt": "2026-03-21T10:00:00.000Z",
         "updatedAt": "2026-03-21T10:00:00.000Z"
@@ -120,7 +124,11 @@ Investors who have purchased shares in a listing can post one text review per li
         {
           "_id": "<reviewId>",
           "listing": "<listingId>",
-          "investor": { "_id": "<userId>", "fullName": "Abebe Kebede", "profilePicture": null },
+          "investor": {
+            "_id": "<userId>",
+            "fullName": "Abebe Kebede",
+            "profilePicture": null
+          },
           "body": "I invested in this farmland because ...",
           "createdAt": "2026-03-21T10:00:00.000Z",
           "updatedAt": "2026-03-21T10:00:00.000Z"
@@ -179,11 +187,11 @@ Investors who have purchased shares in a listing can post one text review per li
 
 ### Error Responses
 
-| Status | Message |
-|--------|---------|
-| `403` | Only investors can post reviews |
-| `403` | You can only review listings that you have invested in |
-| `403` | You can only edit/delete your own reviews |
-| `404` | Listing not found |
-| `404` | Review not found |
-| `409` | You have already submitted a review for this listing |
+| Status | Message                                                |
+| ------ | ------------------------------------------------------ |
+| `403`  | Only investors can post reviews                        |
+| `403`  | You can only review listings that you have invested in |
+| `403`  | You can only edit/delete your own reviews              |
+| `404`  | Listing not found                                      |
+| `404`  | Review not found                                       |
+| `409`  | You have already submitted a review for this listing   |

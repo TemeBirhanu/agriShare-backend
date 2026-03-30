@@ -37,8 +37,12 @@ const investmentContractSchema = new Schema(
     },
     status: {
       type: String,
-      enum: ["active", "completed", "disputed"],
+      enum: ["active", "completed", "disputed", "refunded"],
       default: "active",
+    },
+    refundedAt: {
+      type: Date,
+      default: null,
     },
     pdfUrl: {
       // later: Cloudinary or local file path

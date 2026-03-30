@@ -16,6 +16,7 @@ import investmentRoutes from "./routes/investment.routes.js";
 import distributionRoutes from "./routes/distribution.routes.js";
 import creditsRoutes from "./routes/credits.routes.js";
 import farmerVerificationRoutes from "./routes/farmerVerification.routes.js";
+import { startFundingLifecycleScheduler } from "./services/scheduler.service.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -57,6 +58,7 @@ app.use(errorHandler);
 
 const startServer = async () => {
   await connectDB();
+  startFundingLifecycleScheduler();
   app.listen(PORT, () => {
     console.log(`✅ Server running on http://localhost:${PORT}`);
     console.log(`🌍 Environment: ${process.env.NODE_ENV}`);

@@ -18,6 +18,7 @@ const assetSchema = new Schema(
       type: String,
       required: true,
       trim: true,
+      unique: [true, "Farmer cannot have duplicate asset names"],
     },
     description: {
       type: String,
