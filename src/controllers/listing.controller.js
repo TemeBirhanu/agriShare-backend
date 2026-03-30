@@ -1,6 +1,7 @@
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import mongoose from "mongoose";
 import Asset from "../models/Asset.js";
 import Listing from "../models/Listing.js";
 import ListingUpdate from "../models/ListingUpdate.js";
@@ -307,6 +308,10 @@ export const getMyListings = asyncHandler(async (req, res) => {
 });
 
 export const getListingById = asyncHandler(async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    throw new ApiError(400, "Invalid listing id");
+  }
+
   const listing = await Listing.findById(req.params.id)
     .populate("asset")
     .populate("farmer", "fullName phone profilePicture");
