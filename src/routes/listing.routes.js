@@ -6,6 +6,7 @@ import {
   getActiveListings,
   getMyListings,
   getListingById,
+  getListingInvestors,
   getAllListings,
 } from "../controllers/listing.controller.js";
 import {
@@ -32,6 +33,12 @@ router.get(
   protect,
   restrictTo("farmer"),
   asyncHandler(getMyListings),
+);
+router.get(
+  "/:id/investors",
+  protect,
+  restrictTo("farmer", "admin"),
+  asyncHandler(getListingInvestors),
 );
 router.get("/:id", protect, asyncHandler(getListingById));
 router.post(
