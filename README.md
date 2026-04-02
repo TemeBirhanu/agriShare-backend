@@ -211,6 +211,7 @@ The backend includes a modular in-app notification system for farmer, investor, 
 - AgriCredits monthly grant -> notify user with deposited amount.
 - AgriCredits signup bonus -> notify user.
 - AgriCredits bundle purchase -> notify user with bundle and balance summary.
+- Added the unread-count endpoint for badge display.
 
 ### Notification API Endpoints
 
@@ -220,5 +221,19 @@ The backend includes a modular in-app notification system for farmer, investor, 
 - DELETE `/api/users/me/notifications/:id`
 - DELETE `/api/users/me/notifications/clear`
 - DELETE `/api/users/me/notifications/clear?isRead=true`
+- GET `/api/users/me/notifications/unread-count`
+
+Added the unread-count endpoint for badge display in the frontend ui. its response is as follows:
+
+```bash
+{
+  "statusCode": 200,
+  "data": {
+    "unreadCount": 5
+  },
+  "message": "Unread notification count retrieved successfully",
+  "success": true
+}
+```
 
 All notification endpoints require bearer token authentication.

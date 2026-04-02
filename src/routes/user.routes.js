@@ -13,6 +13,7 @@ import {
 } from "../controllers/user.controller.js";
 import {
   getMyNotifications,
+  getUnreadNotificationCount,
   markNotificationAsRead,
   markAllNotificationsAsRead,
   deleteNotification,
@@ -26,6 +27,11 @@ router.patch("/me", protect, updateMyProfile);
 router.patch("/me/password", protect, changeMyPassword);
 router.delete("/me", protect, deactivateMyAccount);
 router.get("/me/notifications", protect, getMyNotifications);
+router.get(
+  "/me/notifications/unread-count",
+  protect,
+  getUnreadNotificationCount,
+);
 router.patch("/me/notifications/read-all", protect, markAllNotificationsAsRead);
 router.patch("/me/notifications/:id/read", protect, markNotificationAsRead);
 router.delete("/me/notifications/clear", protect, clearMyNotifications);

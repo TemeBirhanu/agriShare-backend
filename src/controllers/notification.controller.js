@@ -49,6 +49,21 @@ export const getMyNotifications = asyncHandler(async (req, res) => {
   );
 });
 
+export const getUnreadNotificationCount = asyncHandler(async (req, res) => {
+  const unreadCount = await Notification.countDocuments({
+    recipient: req.user._id,
+    isRead: false,
+  });
+
+  return res.json(
+    new ApiResponse(
+      200,
+      { unreadCount },
+      "Unread notification count retrieved successfully",
+    ),
+  );
+});
+
 export const markNotificationAsRead = asyncHandler(async (req, res) => {
   const notification = await Notification.findOneAndUpdate(
     {
