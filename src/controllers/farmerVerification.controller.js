@@ -3,6 +3,10 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import User from "../models/User.js";
 import FarmerVerification from "../models/FarmerVerification.js";
+import {
+  createNotificationSafe,
+  notifyRoleSafe,
+} from "../services/notification.service.js";
 
 const ensureFarmer = (user) => {
   if (!user || user.role !== "farmer") {
@@ -81,6 +85,18 @@ export const submitFarmerVerification = asyncHandler(async (req, res) => {
     verificationStatus: "pending",
     verificationRejectionReason: undefined,
     isVerified: false,
+  });
+
+  await notifyRoleSafe("admin", {
+    type: "verification_request",
+    title: "New Farmer Verification Request",
+    message: `${req.user.firstName} ${req.user.lastName} submitted Fayda verification for review`,
+    referenceId: verification._id,
+    referenceModel: "FarmerVerification",
+    meta: {
+      farmerId: req.user._id,
+      faydaIdNumber,
+    },
   });
 
   return res
@@ -194,6 +210,25 @@ export const reviewFarmerVerification = asyncHandler(async (req, res) => {
     verificationRejectionReason:
       status === "rejected" ? rejectionReason : undefined,
     isVerified: status === "verified",
+  });
+
+  await createNotificationSafe({
+    recipient: verification.user,
+    type: "verification_update",
+    title:
+      status === "verified"
+        ? "Farmer Verification Approved"
+        : "Farmer Verification Rejected",
+    message:
+      status === "verified"
+        ? "You are verified now. You can list your assets."
+        : `Verification request rejected due to: ${rejectionReason}`,
+    referenceId: verification._id,
+    referenceModel: "FarmerVerification",
+    meta: {
+      status,
+      reason: status === "rejected" ? rejectionReason : null,
+    },
   });
 
   const updatedVerification = await FarmerVerification.findById(

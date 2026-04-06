@@ -1,8 +1,10 @@
 import Listing from "../models/Listing.js";
 import ListingUpdate from "../models/ListingUpdate.js";
+import ShareOwnership from "../models/ShareOwnership.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { notifyUserIdsSafe } from "../services/notification.service.js";
 
 const normalizeText = (value) =>
   typeof value === "string" ? value.trim() : "";
@@ -57,7 +59,7 @@ export const createListingUpdate = asyncHandler(async (req, res) => {
   ensureFarmer(req.user);
 
   const listing = await Listing.findById(req.params.id).select(
-    "_id farmer paydayDate",
+    "_id farmer paydayDate pitchTitle",
   );
   if (!listing) {
     throw new ApiError(404, "Listing not found");
@@ -102,6 +104,29 @@ export const createListingUpdate = asyncHandler(async (req, res) => {
     postedAt: new Date(),
     isSystem: false,
   });
+
+  const investors = await ShareOwnership.find({
+    listing: listing._id,
+    status: "active",
+    shares: { $gt: 0 },
+  }).select("investor");
+
+  await notifyUserIdsSafe(
+    investors.map((holder) => holder.investor),
+    {
+      type: "listing_update",
+      title: "New Listing Update",
+      message: `A new update was posted for \"${
+        listing.pitchTitle || "your listing"
+      }\". Open the listing to review the latest progress.`,
+      referenceId: update._id,
+      referenceModel: "ListingUpdate",
+      meta: {
+        listingId: listing._id,
+        updateTitle: title,
+      },
+    },
+  );
 
   return res
     .status(201)

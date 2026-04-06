@@ -10,6 +10,7 @@ import {
 } from "../services/token.service.js";
 import InvestmentContract from "../models/InvestmentContract.js";
 import ShareOwnership from "../models/ShareOwnership.js";
+import { createNotificationSafe } from "../services/notification.service.js";
 
 const roundBirr = (value) =>
   Math.round((Number(value) + Number.EPSILON) * 100) / 100;
@@ -194,9 +195,43 @@ export const buyInvestmentShares = asyncHandler(async (req, res) => {
       }
 
       fundsReleased = true;
+
+      await createNotificationSafe({
+        recipient: listing.farmer,
+        type: "listing_goal_reached",
+        title: "Congratulations! Funding Goal Achieved",
+        message: `Your listing \"${
+          listing.pitchTitle || "investment listing"
+        }\" has reached its investment goal of ${
+          listing.investmentGoalBirr
+        } Birr.`,
+        referenceId: listing._id,
+        referenceModel: "Listing",
+        meta: {
+          totalInvestedBirr: listing.totalInvestedBirr,
+          investmentGoalBirr: listing.investmentGoalBirr,
+        },
+      });
     }
 
     await listing.save(withSession(session));
+
+    await createNotificationSafe({
+      recipient: listing.farmer,
+      type: "listing_share_sold",
+      title: "Share Sold",
+      message: `${requestedShares} share(s) were sold in \"${
+        listing.pitchTitle || "your listing"
+      }\" for ${costBirr} Birr.`,
+      referenceId: listing._id,
+      referenceModel: "Listing",
+      meta: {
+        sharesSold: requestedShares,
+        amountBirr: costBirr,
+        investorId: req.user._id,
+        investorName: `${req.user.firstName} ${req.user.lastName}`.trim(),
+      },
+    });
 
     return {
       success: true,

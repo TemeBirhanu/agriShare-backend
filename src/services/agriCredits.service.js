@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 import CreditTransaction from "../models/CreditTransaction.js";
 import { ApiError } from "../utils/ApiError.js";
+import { createNotificationSafe } from "./notification.service.js";
 
 const MONTHLY_FREE = 40;
 const SIGNUP_BONUS = 60;
@@ -54,12 +55,26 @@ export async function grantMonthlyCredits(userId) {
   await user.save();
 
   // Log transaction
-  await CreditTransaction.create({
+  const tx = await CreditTransaction.create({
     user: user._id,
     type: "monthly_reset",
     amount: toGrant,
     balanceAfter: newBalance,
     description: `Monthly reset (${MONTHLY_FREE} per month)`,
+  });
+
+  await createNotificationSafe({
+    recipient: user._id,
+    type: "credit_grant",
+    title: "Monthly AgriCredits Added",
+    message: `${toGrant} AgriCredits were deposited to your account. New balance: ${newBalance}.`,
+    referenceId: tx._id,
+    referenceModel: "CreditTransaction",
+    meta: {
+      grantType: "monthly_reset",
+      amount: toGrant,
+      balanceAfter: newBalance,
+    },
   });
 
   return { granted: toGrant, newBalance };
@@ -73,12 +88,26 @@ export async function grantSignupBonus(userId) {
   user.agriCreditsBalance = SIGNUP_BONUS;
   await user.save();
 
-  await CreditTransaction.create({
+  const tx = await CreditTransaction.create({
     user: user._id,
     type: "signup_bonus",
     amount: SIGNUP_BONUS,
     balanceAfter: SIGNUP_BONUS,
     description: "Welcome bonus on registration",
+  });
+
+  await createNotificationSafe({
+    recipient: user._id,
+    type: "credit_grant",
+    title: "Signup Bonus Added",
+    message: `${SIGNUP_BONUS} AgriCredits were deposited as your signup bonus.`,
+    referenceId: tx._id,
+    referenceModel: "CreditTransaction",
+    meta: {
+      grantType: "signup_bonus",
+      amount: SIGNUP_BONUS,
+      balanceAfter: SIGNUP_BONUS,
+    },
   });
 }
 
@@ -185,12 +214,29 @@ export async function purchaseBundle(userId, bundleKey) {
   await user.save();
 
   // Log credit transaction
-  await CreditTransaction.create({
+  const tx = await CreditTransaction.create({
     user: user._id,
     type: "purchase",
     amount: bundle.credits,
     balanceAfter: newCredits,
     description: `${bundle.name} purchased (${bundle.credits} credits for ${bundle.priceBirr} Birr)`,
+  });
+
+  await createNotificationSafe({
+    recipient: user._id,
+    type: "credit_purchase",
+    title: "AgriCredits Bundle Purchased",
+    message: `${bundle.credits} AgriCredits were added from ${bundle.name}. Wallet charged: ${bundle.priceBirr} Birr. New credit balance: ${newCredits}.`,
+    referenceId: tx._id,
+    referenceModel: "CreditTransaction",
+    meta: {
+      bundleKey,
+      bundleName: bundle.name,
+      creditsAdded: bundle.credits,
+      priceBirr: bundle.priceBirr,
+      newCreditsBalance: newCredits,
+      newWalletBalance: user.walletBalance,
+    },
   });
 
   return {

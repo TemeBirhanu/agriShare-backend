@@ -195,3 +195,48 @@ Investors who have purchased shares in a listing can post one text review per li
 | `404`  | Listing not found                                      |
 | `404`  | Review not found                                       |
 | `409`  | You have already submitted a review for this listing   |
+
+---
+
+## In-App Notifications
+
+The backend includes a modular in-app notification system for farmer, investor, and admin users.
+
+### Current Notification Triggers
+
+- Farmer Fayda verification submitted -> notify admins.
+- Farmer Fayda verification reviewed -> notify farmer (approved/rejected with reason).
+- Asset submitted for verification -> notify admins.
+- Asset verification reviewed -> notify farmer (verified/rejected with reason/comment).
+- AgriCredits monthly grant -> notify user with deposited amount.
+- AgriCredits signup bonus -> notify user.
+- AgriCredits bundle purchase -> notify user with bundle and balance summary.
+- Farmer gets notified on every share sale in
+- Farmer gets a congratulatory notification when the investment goal is reached
+- All investors of a listing get notified when the farmer posts a new update
+- Added the unread-count endpoint for badge display.
+
+### Notification API Endpoints
+
+- GET `/api/users/me/notifications?page=1&limit=20&isRead=false&type=credit_grant`
+- PATCH `/api/users/me/notifications/read-all`
+- PATCH `/api/users/me/notifications/:id/read`
+- DELETE `/api/users/me/notifications/:id`
+- DELETE `/api/users/me/notifications/clear`
+- DELETE `/api/users/me/notifications/clear?isRead=true`
+- GET `/api/users/me/notifications/unread-count`
+
+Added the unread-count endpoint for badge display in the frontend ui. its response is as follows:
+
+```bash
+{
+  "statusCode": 200,
+  "data": {
+    "unreadCount": 5
+  },
+  "message": "Unread notification count retrieved successfully",
+  "success": true
+}
+```
+
+All notification endpoints require bearer token authentication.

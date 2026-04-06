@@ -2,6 +2,10 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import Asset from "../models/Asset.js";
+import {
+  createNotificationSafe,
+  notifyRoleSafe,
+} from "../services/notification.service.js";
 // import { mintNFT } from "../services/blockchain.service.js"; // Assuming blockchain service is updated too or will be
 
 // Create asset
@@ -11,16 +15,18 @@ const createAsset = asyncHandler(async (req, res) => {
   }
 
   // Extract uploaded files
-  const photos = req.files?.photos?.map((file) => ({
-    url: file.path,
-    description: "Uploaded photo",
-  })) || [];
+  const photos =
+    req.files?.photos?.map((file) => ({
+      url: file.path,
+      description: "Uploaded photo",
+    })) || [];
 
-  const documents = req.files?.documents?.map((file) => ({
-    type: "uploaded_document",
-    url: file.path,
-    originalName: file.originalname,
-  })) || [];
+  const documents =
+    req.files?.documents?.map((file) => ({
+      type: "uploaded_document",
+      url: file.path,
+      originalName: file.originalname,
+    })) || [];
 
   const assetData = {
     ...req.body,
@@ -31,6 +37,18 @@ const createAsset = asyncHandler(async (req, res) => {
   };
 
   const asset = await Asset.create(assetData);
+
+  await notifyRoleSafe("admin", {
+    type: "asset_pending",
+    title: "New Asset Pending Verification",
+    message: `Asset \"${asset.name}\" is submitted and awaiting admin review`,
+    referenceId: asset._id,
+    referenceModel: "Asset",
+    meta: {
+      farmerId: req.user._id,
+      assetType: asset.type,
+    },
+  });
 
   return res
     .status(201)
@@ -126,6 +144,27 @@ const verifyAsset = asyncHandler(async (req, res) => {
   asset.verifiedAt = new Date();
 
   await asset.save();
+
+  await createNotificationSafe({
+    recipient: asset.farmer,
+    type: "asset_verification",
+    title:
+      status === "verified"
+        ? "Asset Verification Approved"
+        : "Asset Verification Rejected",
+    message:
+      status === "verified"
+        ? `Your asset \"${asset.name}\" is verified and ready for listing.`
+        : `Your asset \"${asset.name}\" was rejected${
+            comment ? ` due to: ${comment}` : "."
+          }`,
+    referenceId: asset._id,
+    referenceModel: "Asset",
+    meta: {
+      status,
+      comment: comment || null,
+    },
+  });
 
   const message =
     status === "verified" ? "Asset verified successfully" : "Asset rejected";
