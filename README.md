@@ -240,3 +240,372 @@ Added the unread-count endpoint for badge display in the frontend ui. its respon
 ```
 
 All notification endpoints require bearer token authentication.
+
+---
+
+## Admin API
+
+Admin dashboard and operations endpoints are available under `/api/admin`.
+
+### Notes on Behavior
+
+- All admin endpoints require `Authorization: Bearer <token>` with `admin` role.
+- Non-admin users receive `403 Access denied`.
+- Analytics endpoints accept flexible date-window query params:
+  - `days` (default `30`)
+  - `startDate` and `endDate` (ISO date-time)
+  - If `startDate > endDate`, the backend swaps them automatically.
+- Queue endpoints support pagination:
+  - `page` (default `1`)
+  - `limit` (default `20`, max `100`)
+- Listing risk queue supports filter query params:
+  - `daysWindow` (default `10`)
+  - `maxFundingProgressPercent` (default `80`, max `100`)
+- Refund operation endpoint wraps the platform refund service and supports:
+  - `force` (default `true`)
+  - `reason` (optional audit reason)
+
+### Base URL
+
+`http://localhost:5000/api/admin`
+
+### Postman Header Example
+
+```http
+Authorization: Bearer <admin_jwt_token>
+Content-Type: application/json
+```
+
+### Endpoints
+
+#### 1) Dashboard overview
+
+- **GET** `/dashboard/overview`
+
+Sample response `200`:
+
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "users": {
+      "total": 140,
+      "active": 132,
+      "inactive": 8,
+      "farmers": 62,
+      "investors": 75,
+      "admins": 3
+    },
+    "queues": {
+      "pendingFarmerVerifications": 9,
+      "pendingAssets": 14
+    },
+    "listings": {
+      "active": 20,
+      "funded": 5,
+      "completed": 17,
+      "cancelled": 1,
+      "failed": 2,
+      "refunded": 4
+    },
+    "investments": {
+      "totalContracts": 401,
+      "activeContracts": 112,
+      "completedContracts": 245,
+      "refundedContracts": 44,
+      "grossInvestmentBirr": 12150000,
+      "refundedAmountBirr": 955000
+    },
+    "notifications": {
+      "unread": 58
+    },
+    "generatedAt": "2026-04-07T10:30:00.000Z"
+  },
+  "message": "Admin overview retrieved",
+  "success": true
+}
+```
+
+#### 2) Verification queue
+
+- **GET** `/queues/verifications?page=1&limit=20`
+
+Sample response `200`:
+
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "total": 9,
+    "page": 1,
+    "limit": 20,
+    "hasNextPage": false,
+    "items": [
+      {
+        "_id": "6612f2ca40b23ed56f23a9ac",
+        "status": "pending",
+        "faydaIdNumber": "FAYDA-112233",
+        "submittedAt": "2026-04-02T09:10:00.000Z",
+        "user": {
+          "_id": "6612f19140b23ed56f23a990",
+          "firstName": "Abebe",
+          "lastName": "Kebede",
+          "email": "abebe@example.com",
+          "phone": "+251900000001",
+          "region": "Amhara",
+          "zone": "East Gojjam",
+          "woreda": "Debre Elias",
+          "kebele": "01"
+        }
+      }
+    ]
+  },
+  "message": "Pending farmer verification queue retrieved",
+  "success": true
+}
+```
+
+#### 3) Asset queue
+
+- **GET** `/queues/assets?page=1&limit=20`
+
+Sample response `200`:
+
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "total": 14,
+    "page": 1,
+    "limit": 20,
+    "hasNextPage": false,
+    "items": [
+      {
+        "_id": "6612f4d040b23ed56f23aa10",
+        "type": "farmland",
+        "name": "Teff Plot - Gozamin",
+        "status": "pending",
+        "createdAt": "2026-04-03T12:30:00.000Z",
+        "farmer": {
+          "_id": "6612f19140b23ed56f23a990",
+          "firstName": "Abebe",
+          "lastName": "Kebede",
+          "email": "abebe@example.com",
+          "phone": "+251900000001"
+        }
+      }
+    ]
+  },
+  "message": "Pending asset verification queue retrieved",
+  "success": true
+}
+```
+
+#### 4) Listing risk queue
+
+- **GET** `/queues/listings-risk?page=1&limit=20&daysWindow=10&maxFundingProgressPercent=80`
+
+Sample response `200`:
+
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "total": 3,
+    "page": 1,
+    "limit": 20,
+    "filters": {
+      "daysWindow": 10,
+      "maxFundingProgressPercent": 80
+    },
+    "hasNextPage": false,
+    "items": [
+      {
+        "_id": "6612f70a40b23ed56f23abc0",
+        "status": "active",
+        "investmentGoalBirr": 500000,
+        "totalInvestedBirr": 160000,
+        "investmentDeadline": "2026-04-12T00:00:00.000Z",
+        "payoutMode": "fixed",
+        "fundingProgressPercent": 32,
+        "farmer": {
+          "_id": "6612f19140b23ed56f23a990",
+          "firstName": "Abebe",
+          "lastName": "Kebede",
+          "email": "abebe@example.com",
+          "phone": "+251900000001"
+        }
+      }
+    ]
+  },
+  "message": "Listing risk queue retrieved",
+  "success": true
+}
+```
+
+#### 5) Investment analytics
+
+- **GET** `/analytics/investments?days=30`
+
+Sample response `200`:
+
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "window": {
+      "startDate": "2026-03-08T10:30:00.000Z",
+      "endDate": "2026-04-07T10:30:00.000Z",
+      "days": 30
+    },
+    "summary": {
+      "contractCount": 86,
+      "totalInvestedBirr": 2750000,
+      "uniqueInvestorCount": 41,
+      "averageTicketBirr": 31976.74
+    },
+    "byDay": [
+      {
+        "date": "2026-04-05",
+        "contractCount": 4,
+        "totalInvestedBirr": 122000
+      }
+    ],
+    "topListings": [
+      {
+        "listingId": "6612f70a40b23ed56f23abc0",
+        "contractCount": 16,
+        "totalInvestedBirr": 600000,
+        "status": "funded",
+        "investmentGoalBirr": 500000,
+        "totalInvestedListingBirr": 520000
+      }
+    ]
+  },
+  "message": "Investment analytics retrieved",
+  "success": true
+}
+```
+
+#### 6) Distribution analytics
+
+- **GET** `/analytics/distributions?days=30`
+
+Sample response `200`:
+
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "window": {
+      "startDate": "2026-03-08T10:30:00.000Z",
+      "endDate": "2026-04-07T10:30:00.000Z",
+      "days": 30
+    },
+    "summary": {
+      "activeContracts": 112,
+      "completedContracts": 245,
+      "refundedContracts": 44,
+      "completedContractValueBirr": 7600000,
+      "refundedContractValueBirr": 955000,
+      "refundedListings": 4,
+      "investorPayoutBirr": 420000
+    }
+  },
+  "message": "Distribution analytics retrieved",
+  "success": true
+}
+```
+
+#### 7) Credits analytics
+
+- **GET** `/analytics/credits?days=30`
+
+Sample response `200`:
+
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "window": {
+      "startDate": "2026-03-08T10:30:00.000Z",
+      "endDate": "2026-04-07T10:30:00.000Z",
+      "days": 30
+    },
+    "summary": {
+      "transactionCount": 210,
+      "totalAbsoluteVolume": 1540,
+      "positiveCredits": 980,
+      "negativeCredits": 560
+    },
+    "byType": [
+      {
+        "type": "monthly_reset",
+        "transactionCount": 62,
+        "totalAmount": 620,
+        "absoluteVolume": 620
+      }
+    ],
+    "byDay": [
+      {
+        "date": "2026-04-05",
+        "transactionCount": 13,
+        "absoluteVolume": 75
+      }
+    ]
+  },
+  "message": "AgriCredits analytics retrieved",
+  "success": true
+}
+```
+
+#### 8) Manual refund operation
+
+- **POST** `/operations/refunds/:listingId`
+
+Sample request body:
+
+```json
+{
+  "force": true,
+  "reason": "admin_manual_refund_after_dispute"
+}
+```
+
+Sample response `200`:
+
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "refund": {
+      "refunded": true,
+      "listingId": "6612f70a40b23ed56f23abc0",
+      "refundedContractCount": 21,
+      "refundedAmountBirr": 312500,
+      "investorCount": 14,
+      "reason": "admin_manual_refund_after_dispute"
+    }
+  },
+  "message": "Refund operation completed",
+  "success": true
+}
+```
+
+### Common Error Examples
+
+```json
+{
+  "statusCode": 403,
+  "message": "Access denied. Only admin can access this resource",
+  "success": false
+}
+```
+
+```json
+{
+  "statusCode": 400,
+  "message": "Invalid listingId",
+  "success": false
+}
+```

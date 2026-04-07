@@ -16,6 +16,7 @@ import investmentRoutes from "./routes/investment.routes.js";
 import distributionRoutes from "./routes/distribution.routes.js";
 import creditsRoutes from "./routes/credits.routes.js";
 import farmerVerificationRoutes from "./routes/farmerVerification.routes.js";
+import adminRoutes from "./routes/admin.routes.js";
 import { startFundingLifecycleScheduler } from "./services/scheduler.service.js";
 
 const app = express();
@@ -36,6 +37,7 @@ app.use("/api/investments", investmentRoutes);
 app.use("/api/distributions", distributionRoutes);
 app.use("/api/credits", creditsRoutes);
 app.use("/api/farmer-verifications", farmerVerificationRoutes);
+app.use("/api/admin", adminRoutes);
 
 // Health check
 app.get("/", (req, res) => {
