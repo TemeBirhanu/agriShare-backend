@@ -10,6 +10,10 @@ import {
   getMyActiveInvestments,
   getMyHistory,
   getFarmerInvestments,
+  submitInvestorRefundRequest,
+  getMyRefundRequests,
+  getPendingInvestorRefundRequestsForAdmin,
+  reviewInvestorRefundRequestByAdmin,
 } from "../controllers/investment.controller.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { getInvestmentContracts } from "../controllers/contract.controller.js";
@@ -42,12 +46,42 @@ router.get(
   getMyHistory,
 );
 
+router.post(
+  "/refund-requests",
+  protect,
+  restrictTo("investor"),
+  requireVerifiedInvestor,
+  submitInvestorRefundRequest,
+);
+
+router.get(
+  "/my-refund-requests",
+  protect,
+  restrictTo("investor"),
+  requireVerifiedInvestor,
+  getMyRefundRequests,
+);
+
 // Farmer: all investments in my listings
 router.get(
   "/farmer/my-investments",
   protect,
   restrictTo("farmer"),
   getFarmerInvestments,
+);
+
+router.get(
+  "/admin/refund-requests",
+  protect,
+  restrictTo("admin"),
+  getPendingInvestorRefundRequestsForAdmin,
+);
+
+router.patch(
+  "/admin/refund-requests/:id/review",
+  protect,
+  restrictTo("admin"),
+  reviewInvestorRefundRequestByAdmin,
 );
 
 export default router;
