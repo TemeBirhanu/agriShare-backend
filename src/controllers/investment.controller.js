@@ -10,7 +10,9 @@ import {
 } from "../services/token.service.js";
 import InvestmentContract from "../models/InvestmentContract.js";
 import ShareOwnership from "../models/ShareOwnership.js";
+import InvestorRefundRequest from "../models/InvestorRefundRequest.js";
 import { createNotificationSafe } from "../services/notification.service.js";
+import { approveInvestorRefundRequest } from "../services/refund.service.js";
 
 const roundBirr = (value) =>
   Math.round((Number(value) + Number.EPSILON) * 100) / 100;
@@ -23,6 +25,14 @@ const isTransactionNotSupportedError = (error) =>
   );
 
 const withSession = (session) => (session ? { session } : {});
+
+const parsePositiveInt = (value, fallback) => {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return parsed;
+};
 
 export const buyInvestmentShares = asyncHandler(async (req, res) => {
   if (req.user.role !== "investor") {
@@ -340,3 +350,358 @@ export const getFarmerInvestments = asyncHandler(async (req, res) => {
     new ApiResponse(200, { investments }, "All investments in your listings"),
   );
 });
+
+export const submitInvestorRefundRequest = asyncHandler(async (req, res) => {
+  if (req.user.role !== "investor") {
+    throw new ApiError(403, "Only investors can submit refund requests");
+  }
+
+  const { listingId, reason } = req.body;
+  if (!listingId || !mongoose.Types.ObjectId.isValid(listingId)) {
+    throw new ApiError(400, "Valid listingId is required");
+  }
+
+  const listing = await Listing.findById(listingId)
+    .select("_id status farmer pitchTitle")
+    .lean();
+  if (!listing) {
+    throw new ApiError(404, "Listing not found");
+  }
+
+  if (listing.status !== "active") {
+    throw new ApiError(
+      400,
+      "Refund request can only be submitted while listing is active",
+    );
+  }
+
+  const existingPending = await InvestorRefundRequest.findOne({
+    listing: listing._id,
+    investor: req.user._id,
+    status: "pending",
+  });
+
+  if (existingPending) {
+    throw new ApiError(
+      409,
+      "You already have a pending refund request for this listing",
+    );
+  }
+
+  const contracts = await InvestmentContract.find({
+    listing: listing._id,
+    investor: req.user._id,
+    status: { $in: ["active", "disputed"] },
+  })
+    .select("amountPaidBirr sharesPurchased")
+    .lean();
+
+  if (contracts.length === 0) {
+    throw new ApiError(
+      400,
+      "No active or disputed investments found for this listing",
+    );
+  }
+
+  const requestedAmountBirr = contracts.reduce(
+    (sum, contract) => roundBirr(sum + Number(contract.amountPaidBirr || 0)),
+    0,
+  );
+
+  const requestedShares = contracts.reduce(
+    (sum, contract) => sum + Number(contract.sharesPurchased || 0),
+    0,
+  );
+
+  const normalizedReason =
+    typeof reason === "string" && reason.trim() ? reason.trim() : null;
+
+  const refundRequest = await InvestorRefundRequest.create({
+    listing: listing._id,
+    investor: req.user._id,
+    farmer: listing.farmer,
+    status: "pending",
+    investorReason: normalizedReason,
+    requestedAmountBirr,
+    requestedShares,
+    requestedContractCount: contracts.length,
+    requestedAt: new Date(),
+  });
+
+  await createNotificationSafe({
+    recipient: listing.farmer,
+    type: "investor_refund_request",
+    title: "Investor Refund Request Submitted",
+    message: `An investor submitted a refund request for listing \"${
+      listing.pitchTitle || "your listing"
+    }\".`,
+    referenceId: refundRequest._id,
+    referenceModel: "InvestorRefundRequest",
+    meta: {
+      listingId: String(listing._id),
+      investorId: String(req.user._id),
+      requestedAmountBirr,
+    },
+  });
+
+  const adminUsers = await User.find({ role: "admin", isActive: true })
+    .select("_id")
+    .lean();
+
+  await Promise.all(
+    adminUsers.map((adminUser) =>
+      createNotificationSafe({
+        recipient: adminUser._id,
+        type: "investor_refund_request",
+        title: "New Investor Refund Request",
+        message: `${req.user.firstName} ${
+          req.user.lastName
+        } requested refund for listing \"${
+          listing.pitchTitle || "investment listing"
+        }\".`,
+        referenceId: refundRequest._id,
+        referenceModel: "InvestorRefundRequest",
+        meta: {
+          listingId: String(listing._id),
+          investorId: String(req.user._id),
+          requestedAmountBirr,
+        },
+      }),
+    ),
+  );
+
+  return res
+    .status(201)
+    .json(
+      new ApiResponse(
+        201,
+        { refundRequest },
+        "Refund request submitted and pending admin review",
+      ),
+    );
+});
+
+export const getMyRefundRequests = asyncHandler(async (req, res) => {
+  if (req.user.role !== "investor") {
+    throw new ApiError(403, "Only investors can view their refund requests");
+  }
+
+  const page = parsePositiveInt(req.query.page, 1);
+  const limit = Math.min(parsePositiveInt(req.query.limit, 20), 100);
+  const skip = (page - 1) * limit;
+
+  const allowedStatuses = ["pending", "approved", "rejected", "all"];
+  const status = String(req.query.status || "all")
+    .trim()
+    .toLowerCase();
+
+  if (!allowedStatuses.includes(status)) {
+    throw new ApiError(400, "Invalid status filter");
+  }
+
+  const query = { investor: req.user._id };
+  if (status !== "all") {
+    query.status = status;
+  }
+
+  const [total, refundRequests] = await Promise.all([
+    InvestorRefundRequest.countDocuments(query),
+    InvestorRefundRequest.find(query)
+      .populate("listing", "_id status investmentGoalBirr totalInvestedBirr")
+      .populate("reviewedBy", "firstName lastName email")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
+  ]);
+
+  return res.json(
+    new ApiResponse(
+      200,
+      {
+        refundRequests,
+        total,
+        page,
+        limit,
+        hasNextPage: skip + refundRequests.length < total,
+      },
+      "Refund requests retrieved successfully",
+    ),
+  );
+});
+
+export const getPendingInvestorRefundRequestsForAdmin = asyncHandler(
+  async (req, res) => {
+    if (req.user.role !== "admin") {
+      throw new ApiError(403, "Only admins can view investor refund requests");
+    }
+
+    const page = parsePositiveInt(req.query.page, 1);
+    const limit = Math.min(parsePositiveInt(req.query.limit, 20), 100);
+    const skip = (page - 1) * limit;
+
+    const allowedStatuses = ["pending", "approved", "rejected", "all"];
+    const status = String(req.query.status || "pending")
+      .trim()
+      .toLowerCase();
+
+    if (!allowedStatuses.includes(status)) {
+      throw new ApiError(400, "Invalid status filter");
+    }
+
+    const query = {};
+    if (status !== "all") {
+      query.status = status;
+    }
+
+    const [total, refundRequests] = await Promise.all([
+      InvestorRefundRequest.countDocuments(query),
+      InvestorRefundRequest.find(query)
+        .populate("investor", "firstName lastName email phone")
+        .populate("farmer", "firstName lastName email phone")
+        .populate(
+          "listing",
+          "_id status pitchTitle investmentGoalBirr totalInvestedBirr",
+        )
+        .populate("reviewedBy", "firstName lastName email")
+        .sort({ status: 1, createdAt: 1 })
+        .skip(skip)
+        .limit(limit),
+    ]);
+
+    return res.json(
+      new ApiResponse(
+        200,
+        {
+          refundRequests,
+          total,
+          page,
+          limit,
+          hasNextPage: skip + refundRequests.length < total,
+        },
+        "Investor refund requests retrieved",
+      ),
+    );
+  },
+);
+
+export const reviewInvestorRefundRequestByAdmin = asyncHandler(
+  async (req, res) => {
+    if (req.user.role !== "admin") {
+      throw new ApiError(403, "Only admins can review refund requests");
+    }
+
+    const requestId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(requestId)) {
+      throw new ApiError(400, "Invalid refund request id");
+    }
+
+    const status = String(req.body.status || "")
+      .trim()
+      .toLowerCase();
+    const normalizedAdminNote =
+      typeof req.body.adminNote === "string" && req.body.adminNote.trim()
+        ? req.body.adminNote.trim()
+        : null;
+
+    if (!["approved", "rejected"].includes(status)) {
+      throw new ApiError(400, 'status must be either "approved" or "rejected"');
+    }
+
+    const refundRequest = await InvestorRefundRequest.findById(requestId)
+      .populate("investor", "firstName lastName email")
+      .populate("listing", "_id status pitchTitle")
+      .lean();
+
+    if (!refundRequest) {
+      throw new ApiError(404, "Refund request not found");
+    }
+
+    if (refundRequest.status !== "pending") {
+      throw new ApiError(
+        400,
+        `Refund request is already ${refundRequest.status}`,
+      );
+    }
+
+    if (status === "rejected") {
+      const rejectedRequest = await InvestorRefundRequest.findByIdAndUpdate(
+        requestId,
+        {
+          $set: {
+            status: "rejected",
+            adminNote: normalizedAdminNote,
+            reviewedBy: req.user._id,
+            reviewedAt: new Date(),
+          },
+        },
+        { new: true },
+      )
+        .populate("investor", "firstName lastName email")
+        .populate("listing", "_id status pitchTitle")
+        .populate("reviewedBy", "firstName lastName email");
+
+      await createNotificationSafe({
+        recipient: rejectedRequest.investor._id,
+        type: "investor_refund_request_rejected",
+        title: "Refund Request Rejected",
+        message: `Your refund request for listing \"${
+          rejectedRequest.listing?.pitchTitle || "investment listing"
+        }\" was rejected${
+          normalizedAdminNote ? `: ${normalizedAdminNote}` : "."
+        }`,
+        referenceId: rejectedRequest._id,
+        referenceModel: "InvestorRefundRequest",
+        meta: {
+          status: "rejected",
+          adminNote: normalizedAdminNote,
+        },
+      });
+
+      return res.json(
+        new ApiResponse(
+          200,
+          { refundRequest: rejectedRequest },
+          "Refund request rejected",
+        ),
+      );
+    }
+
+    const approvalResult = await approveInvestorRefundRequest(requestId, {
+      adminId: req.user._id,
+      adminNote: normalizedAdminNote,
+    });
+
+    const approvedRequest = await InvestorRefundRequest.findById(requestId)
+      .populate("investor", "firstName lastName email")
+      .populate("listing", "_id status pitchTitle totalInvestedBirr")
+      .populate("reviewedBy", "firstName lastName email");
+
+    await createNotificationSafe({
+      recipient: approvedRequest.investor._id,
+      type: "investor_refund_request_approved",
+      title: "Refund Request Approved",
+      message: `Your refund request for listing \"${
+        approvedRequest.listing?.pitchTitle || "investment listing"
+      }\" has been approved and ${
+        approvalResult.refundedAmountBirr
+      } Birr was credited to your wallet.`,
+      referenceId: approvedRequest._id,
+      referenceModel: "InvestorRefundRequest",
+      meta: {
+        status: "approved",
+        refundedAmountBirr: approvalResult.refundedAmountBirr,
+      },
+    });
+
+    return res.json(
+      new ApiResponse(
+        200,
+        {
+          refundRequest: approvedRequest,
+          settlement: approvalResult,
+        },
+        "Refund request approved and settled",
+      ),
+    );
+  },
+);

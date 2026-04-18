@@ -609,3 +609,259 @@ Sample response `200`:
   "success": false
 }
 ```
+
+---
+
+## Investor Refund Request API
+
+Investor refund requests are available under `/api/investments`.
+
+### Notes on Behavior
+
+- Investor can submit refund request only if listing status is `active`.
+- Investor must have at least one `active` or `disputed` contract on that listing.
+- Only one `pending` request per investor per listing is allowed.
+- Admin can review request as `approved` or `rejected`.
+- On approval, refund settlement happens immediately:
+  - Investor `walletBalance` is credited.
+  - Farmer `fundWalletBalance` is debited.
+  - Related investor contracts become `refunded`.
+  - Investor share ownership becomes `refunded` and shares become `0`.
+  - Listing `totalInvestedBirr` is reduced by refunded amount.
+
+### Base URL
+
+`http://localhost:5000/api/investments`
+
+### Postman Header Example
+
+```http
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
+
+### Investor Endpoints
+
+#### 1) Submit refund request (investor)
+
+- **POST** `/refund-requests`
+- Auth: `Bearer <investor_jwt_token>` (verified investor)
+
+Sample request body:
+
+```json
+{
+  "listingId": "6801d7f0e6f0b7f6bf232111",
+  "reason": "I need early liquidity"
+}
+```
+
+Sample response `201`:
+
+```json
+{
+  "statusCode": 201,
+  "data": {
+    "refundRequest": {
+      "_id": "6801dc3ce6f0b7f6bf232145",
+      "listing": "6801d7f0e6f0b7f6bf232111",
+      "investor": "6801baf1e6f0b7f6bf232001",
+      "farmer": "6801bb49e6f0b7f6bf23200a",
+      "status": "pending",
+      "investorReason": "I need early liquidity",
+      "requestedAmountBirr": 15000,
+      "requestedShares": 3,
+      "requestedContractCount": 1,
+      "requestedAt": "2026-04-18T10:20:00.000Z"
+    }
+  },
+  "message": "Refund request submitted and pending admin review",
+  "success": true
+}
+```
+
+#### 2) Get my refund requests (investor)
+
+- **GET** `/my-refund-requests?status=all&page=1&limit=20`
+- Auth: `Bearer <investor_jwt_token>` (verified investor)
+- `status` can be: `pending`, `approved`, `rejected`, or `all`.
+
+Sample response `200`:
+
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "refundRequests": [
+      {
+        "_id": "6801dc3ce6f0b7f6bf232145",
+        "status": "pending",
+        "requestedAmountBirr": 15000,
+        "listing": {
+          "_id": "6801d7f0e6f0b7f6bf232111",
+          "status": "active",
+          "investmentGoalBirr": 500000,
+          "totalInvestedBirr": 175000
+        },
+        "reviewedBy": null
+      }
+    ],
+    "total": 1,
+    "page": 1,
+    "limit": 20,
+    "hasNextPage": false
+  },
+  "message": "Refund requests retrieved successfully",
+  "success": true
+}
+```
+
+### Admin Endpoints
+
+#### 1) List refund requests (admin)
+
+- **GET** `/admin/refund-requests?status=pending&page=1&limit=20`
+- Auth: `Bearer <admin_jwt_token>`
+- `status` can be: `pending`, `approved`, `rejected`, or `all`.
+
+Sample response `200`:
+
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "refundRequests": [
+      {
+        "_id": "6801dc3ce6f0b7f6bf232145",
+        "status": "pending",
+        "requestedAmountBirr": 15000,
+        "requestedShares": 3,
+        "requestedContractCount": 1,
+        "investor": {
+          "_id": "6801baf1e6f0b7f6bf232001",
+          "firstName": "Bekele",
+          "lastName": "Tadesse",
+          "email": "bekele@example.com",
+          "phone": "+251900000001"
+        },
+        "farmer": {
+          "_id": "6801bb49e6f0b7f6bf23200a",
+          "firstName": "Abebe",
+          "lastName": "Kebede",
+          "email": "abebe@example.com",
+          "phone": "+251900000010"
+        },
+        "listing": {
+          "_id": "6801d7f0e6f0b7f6bf232111",
+          "status": "active",
+          "pitchTitle": "Irrigated Teff Expansion",
+          "investmentGoalBirr": 500000,
+          "totalInvestedBirr": 175000
+        }
+      }
+    ],
+    "total": 1,
+    "page": 1,
+    "limit": 20,
+    "hasNextPage": false
+  },
+  "message": "Investor refund requests retrieved",
+  "success": true
+}
+```
+
+#### 2) Review refund request (admin)
+
+- **PATCH** `/admin/refund-requests/:id/review`
+- Auth: `Bearer <admin_jwt_token>`
+- `status` must be `approved` or `rejected`.
+
+Sample approve request body:
+
+```json
+{
+  "status": "approved",
+  "adminNote": "Approved after review"
+}
+```
+
+Sample reject request body:
+
+```json
+{
+  "status": "rejected",
+  "adminNote": "Not eligible at this time"
+}
+```
+
+Sample response `200` for approve:
+
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "refundRequest": {
+      "_id": "6801dc3ce6f0b7f6bf232145",
+      "status": "approved",
+      "refundedAmountBirr": 15000,
+      "refundedShares": 3,
+      "refundedContractCount": 1
+    },
+    "settlement": {
+      "requestId": "6801dc3ce6f0b7f6bf232145",
+      "listingId": "6801d7f0e6f0b7f6bf232111",
+      "investorId": "6801baf1e6f0b7f6bf232001",
+      "farmerId": "6801bb49e6f0b7f6bf23200a",
+      "refundedAmountBirr": 15000,
+      "refundedShares": 3,
+      "refundedContractCount": 1,
+      "listingTotalInvestedBirr": 160000
+    }
+  },
+  "message": "Refund request approved and settled",
+  "success": true
+}
+```
+
+Sample response `200` for reject:
+
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "refundRequest": {
+      "_id": "6801dc3ce6f0b7f6bf232145",
+      "status": "rejected",
+      "adminNote": "Not eligible at this time"
+    }
+  },
+  "message": "Refund request rejected",
+  "success": true
+}
+```
+
+### Common Error Examples
+
+```json
+{
+  "statusCode": 400,
+  "message": "Refund request can only be submitted while listing is active",
+  "success": false
+}
+```
+
+```json
+{
+  "statusCode": 409,
+  "message": "You already have a pending refund request for this listing",
+  "success": false
+}
+```
+
+```json
+{
+  "statusCode": 409,
+  "message": "Farmer fund wallet balance is insufficient for investor refund",
+  "success": false
+}
+```

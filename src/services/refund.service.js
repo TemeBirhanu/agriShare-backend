@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import InvestmentContract from "../models/InvestmentContract.js";
+import InvestorRefundRequest from "../models/InvestorRefundRequest.js";
 import Listing from "../models/Listing.js";
 import ShareOwnership from "../models/ShareOwnership.js";
 import User from "../models/User.js";
@@ -206,4 +207,176 @@ export const processExpiredListingRefunds = async () => {
     refunded: results.filter((item) => item.refunded).length,
     results,
   };
+};
+
+export const approveInvestorRefundRequest = async (
+  refundRequestId,
+  { adminId, adminNote = null } = {},
+) => {
+  if (!refundRequestId) {
+    throw new ApiError(400, "refundRequestId is required");
+  }
+
+  const runApproval = async (session = null) => {
+    const refundRequestQuery = InvestorRefundRequest.findById(refundRequestId);
+    const refundRequest = session
+      ? await refundRequestQuery.session(session)
+      : await refundRequestQuery;
+
+    if (!refundRequest) {
+      throw new ApiError(404, "Refund request not found");
+    }
+
+    if (refundRequest.status !== "pending") {
+      throw new ApiError(
+        400,
+        `Refund request is already ${refundRequest.status}`,
+      );
+    }
+
+    const listingQuery = Listing.findById(refundRequest.listing);
+    const listing = session
+      ? await listingQuery.session(session)
+      : await listingQuery;
+
+    if (!listing) {
+      throw new ApiError(404, "Listing not found for refund request");
+    }
+
+    if (listing.status !== "active") {
+      throw new ApiError(
+        400,
+        "Refund can only be approved while listing is active",
+      );
+    }
+
+    const contractsQuery = InvestmentContract.find({
+      listing: listing._id,
+      investor: refundRequest.investor,
+      status: { $in: ["active", "disputed"] },
+    });
+    const contracts = session
+      ? await contractsQuery.session(session)
+      : await contractsQuery;
+
+    if (contracts.length === 0) {
+      throw new ApiError(
+        400,
+        "No active or disputed contracts found for this investor on listing",
+      );
+    }
+
+    const refundedAmountBirr = contracts.reduce(
+      (sum, contract) => roundBirr(sum + Number(contract.amountPaidBirr || 0)),
+      0,
+    );
+
+    const refundedShares = contracts.reduce(
+      (sum, contract) => sum + Number(contract.sharesPurchased || 0),
+      0,
+    );
+
+    const farmerQuery = User.findById(listing.farmer);
+    const farmer = session
+      ? await farmerQuery.session(session)
+      : await farmerQuery;
+    if (!farmer) {
+      throw new ApiError(404, "Farmer account not found for refund settlement");
+    }
+
+    if (Number(farmer.fundWalletBalance || 0) < refundedAmountBirr) {
+      throw new ApiError(
+        409,
+        "Farmer fund wallet balance is insufficient for investor refund",
+      );
+    }
+
+    await User.findByIdAndUpdate(
+      refundRequest.investor,
+      { $inc: { walletBalance: refundedAmountBirr } },
+      withSession(session),
+    );
+
+    await User.findByIdAndUpdate(
+      listing.farmer,
+      { $inc: { fundWalletBalance: -refundedAmountBirr } },
+      withSession(session),
+    );
+
+    await InvestmentContract.updateMany(
+      {
+        listing: listing._id,
+        investor: refundRequest.investor,
+        status: { $in: ["active", "disputed"] },
+      },
+      { $set: { status: "refunded", refundedAt: new Date() } },
+      withSession(session),
+    );
+
+    await ShareOwnership.updateMany(
+      {
+        listing: listing._id,
+        investor: refundRequest.investor,
+        status: "active",
+      },
+      {
+        $set: {
+          status: "refunded",
+          shares: 0,
+          refundedAt: new Date(),
+        },
+      },
+      withSession(session),
+    );
+
+    listing.totalInvestedBirr = Math.max(
+      roundBirr(Number(listing.totalInvestedBirr || 0) - refundedAmountBirr),
+      0,
+    );
+    await listing.save(withSession(session));
+
+    refundRequest.status = "approved";
+    refundRequest.reviewedBy = adminId || null;
+    refundRequest.reviewedAt = new Date();
+    refundRequest.refundProcessedAt = new Date();
+    refundRequest.adminNote =
+      typeof adminNote === "string" && adminNote.trim()
+        ? adminNote.trim()
+        : null;
+    refundRequest.refundedAmountBirr = refundedAmountBirr;
+    refundRequest.refundedShares = refundedShares;
+    refundRequest.refundedContractCount = contracts.length;
+    await refundRequest.save(withSession(session));
+
+    return {
+      requestId: String(refundRequest._id),
+      listingId: String(listing._id),
+      investorId: String(refundRequest.investor),
+      farmerId: String(listing.farmer),
+      refundedAmountBirr,
+      refundedShares,
+      refundedContractCount: contracts.length,
+      listingTotalInvestedBirr: listing.totalInvestedBirr,
+    };
+  };
+
+  const session = await mongoose.startSession();
+
+  try {
+    try {
+      let result = null;
+      await session.withTransaction(async () => {
+        result = await runApproval(session);
+      });
+      return result;
+    } catch (error) {
+      if (!isTransactionNotSupportedError(error)) {
+        throw error;
+      }
+
+      return runApproval(null);
+    }
+  } finally {
+    await session.endSession();
+  }
 };
