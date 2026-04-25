@@ -12,6 +12,8 @@ const creditTransactionSchema = new Schema(
     type: {
       type: String,
       enum: [
+        "deposit",
+        "withdrawal",
         "monthly_reset",
         "signup_bonus",
         "purchase",

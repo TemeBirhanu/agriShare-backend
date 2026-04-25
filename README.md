@@ -865,3 +865,175 @@ Sample response `200` for reject:
   "success": false
 }
 ```
+
+---
+
+## Wallet Payments API (Chapa)
+
+This module enables users to deposit to wallet and withdraw to bank account.
+
+### Behavior
+
+- Provider in v1: **Chapa** only.
+- Currency in v1: **ETB**.
+- Deposit is credited to `walletBalance` only after successful provider verification.
+- Webhook processing is idempotent (repeated callbacks will not double-credit).
+- Withdrawal is auto-processed in v1 (no manual admin approval).
+- On withdrawal failure, wallet is automatically restored.
+
+### Base URL
+
+`http://localhost:5000/api/payments`
+
+### Endpoints
+
+#### 1) Initiate deposit
+
+- **POST** `/deposits/initiate`
+- Auth: `Bearer <user_jwt_token>`
+
+Request body:
+
+```json
+{
+  "amountBirr": 1500,
+  "callbackUrl": "http://localhost:5000/api/payments/webhook/chapa",
+  "returnUrl": "http://localhost:3000/wallet/result"
+}
+```
+
+Sample success response `201`:
+
+```json
+{
+  "statusCode": 201,
+  "data": {
+    "payment": {
+      "_id": "680b4f9a3d1df2f417f0a101",
+      "type": "deposit",
+      "provider": "chapa",
+      "txRef": "AGR-DEP-12ABCD-1778000000000-X1Y2Z3",
+      "status": "pending",
+      "amountBirr": 1500,
+      "currency": "ETB"
+    },
+    "checkoutUrl": "https://checkout.chapa.co/checkout/payment/abc123"
+  },
+  "message": "Deposit initiated successfully",
+  "success": true
+}
+```
+
+#### 2) Verify deposit by txRef
+
+- **GET** `/deposits/verify/:txRef`
+- Auth: `Bearer <user_jwt_token>`
+
+Sample success response `200`:
+
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "payment": {
+      "_id": "680b4f9a3d1df2f417f0a101",
+      "status": "successful",
+      "txRef": "AGR-DEP-12ABCD-1778000000000-X1Y2Z3",
+      "settledAt": "2026-04-25T08:13:00.000Z"
+    },
+    "walletBalance": 5500,
+    "alreadySettled": false
+  },
+  "message": "Deposit verified successfully",
+  "success": true
+}
+```
+
+#### 3) Chapa webhook callback
+
+- **POST** `/webhook/chapa`
+- Auth: none (provider callback)
+- Optional signature header if configured:
+  - `x-chapa-signature: <CHAPA_WEBHOOK_SECRET>`
+
+Sample webhook body:
+
+```json
+{
+  "tx_ref": "AGR-DEP-12ABCD-1778000000000-X1Y2Z3"
+}
+```
+
+#### 4) Request bank withdrawal
+
+- **POST** `/withdrawals/request`
+- Auth: `Bearer <user_jwt_token>`
+
+Request body:
+
+```json
+{
+  "amountBirr": 1000,
+  "accountName": "Abebe Kebede",
+  "accountNumber": "1000123456789",
+  "bankCode": "CBE",
+  "bankName": "Commercial Bank of Ethiopia",
+  "narration": "Wallet withdrawal"
+}
+```
+
+Sample success response `201`:
+
+```json
+{
+  "statusCode": 201,
+  "data": {
+    "payment": {
+      "_id": "680b51ba3d1df2f417f0a111",
+      "type": "withdrawal",
+      "status": "successful",
+      "amountBirr": 1000,
+      "txRef": "AGR-WIT-12ABCD-1778000000000-Q1W2E3"
+    },
+    "walletBalance": 4500
+  },
+  "message": "Withdrawal processed successfully",
+  "success": true
+}
+```
+
+#### 5) My payment transactions
+
+- **GET** `/me/transactions?page=1&limit=20&type=all&status=all`
+- Auth: `Bearer <user_jwt_token>`
+
+#### 6) Admin payment transactions
+
+- **GET** `/admin/transactions?page=1&limit=20&type=all&status=all`
+- Auth: `Bearer <admin_jwt_token>`
+
+### Common Errors
+
+```json
+{
+  "statusCode": 400,
+  "message": "amountBirr must be a positive number",
+  "success": false
+}
+```
+
+```json
+{
+  "statusCode": 400,
+  "message": "Insufficient wallet balance for withdrawal",
+  "success": false
+}
+```
+
+```json
+{
+  "statusCode": 401,
+  "message": "Invalid webhook signature",
+  "success": false
+}
+```
