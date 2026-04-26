@@ -1,12 +1,19 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import { ApiError } from "../utils/ApiError.js";
 import InvestmentContract from "../models/InvestmentContract.js";
+import mongoose from "mongoose";
 
 export const getInvestmentContracts = asyncHandler(async (req, res) => {
+  const { listingId } = req.params;
+  if (!listingId || !mongoose.Types.ObjectId.isValid(listingId)) {
+    throw new ApiError(400, "Valid listingId is required");
+  }
+
   const query =
     req.user.role === "farmer"
-      ? { farmer: req.user._id }
-      : { investor: req.user._id };
+      ? { farmer: req.user._id, listing: listingId }
+      : { investor: req.user._id, listing: listingId };
 
   const contracts = await InvestmentContract.find(query)
     .populate({

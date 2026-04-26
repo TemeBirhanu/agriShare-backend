@@ -39,7 +39,11 @@ export const buyInvestmentShares = asyncHandler(async (req, res) => {
     throw new ApiError(403, "Only investors can buy shares");
   }
 
-  const { listingId } = req.body;
+  const { listingId } = req.params;
+  if (!listingId || !mongoose.Types.ObjectId.isValid(listingId)) {
+    throw new ApiError(400, "Valid listingId is required");
+  }
+
   const requestedShares = Number.parseInt(req.body.sharesToBuy, 10);
   if (Number.isNaN(requestedShares) || requestedShares < 1) {
     throw new ApiError(400, "sharesToBuy must be a positive integer");
@@ -356,7 +360,8 @@ export const submitInvestorRefundRequest = asyncHandler(async (req, res) => {
     throw new ApiError(403, "Only investors can submit refund requests");
   }
 
-  const { listingId, reason } = req.body;
+  const { listingId } = req.params;
+  const { reason } = req.body;
   if (!listingId || !mongoose.Types.ObjectId.isValid(listingId)) {
     throw new ApiError(400, "Valid listingId is required");
   }
