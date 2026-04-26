@@ -1,6 +1,7 @@
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import mongoose from "mongoose";
 import Listing from "../models/Listing.js";
 import InvestmentContract from "../models/InvestmentContract.js";
 import User from "../models/User.js";
@@ -18,7 +19,10 @@ export const distributeProfits = asyncHandler(async (req, res) => {
     throw new ApiError(403, "Only farmers can trigger distribution");
   }
 
-  const { listingId } = req.body;
+  const { listingId } = req.params;
+  if (!listingId || !mongoose.Types.ObjectId.isValid(listingId)) {
+    throw new ApiError(400, "Valid listingId is required");
+  }
 
   const listing = await Listing.findById(listingId).populate("asset");
   if (!listing) throw new ApiError(404, "Listing not found");

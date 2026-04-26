@@ -24,7 +24,7 @@ import {
 import { upload } from "../middlewares/upload.middleware.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
-router.post("/", protect, restrictTo("farmer"), createListing);
+router.post("/:assetId", protect, restrictTo("farmer"), createListing);
 router.get("/", protect, asyncHandler(getAllListings));
 router.get("/active", protect, asyncHandler(getActiveListings));
 
