@@ -19,14 +19,14 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { getInvestmentContracts } from "../controllers/contract.controller.js";
 
 router.post(
-  "/buy",
+  "/buy/:listingId",
   protect,
   restrictTo("investor"),
   requireVerifiedInvestor,
   asyncHandler(buyInvestmentShares),
 );
 
-router.get("/contracts", protect, getInvestmentContracts);
+router.get("/contracts/:listingId", protect, getInvestmentContracts);
 
 // My active investments (investor only)
 router.get(
@@ -47,7 +47,7 @@ router.get(
 );
 
 router.post(
-  "/refund-requests",
+  "/refund-requests/:listingId",
   protect,
   restrictTo("investor"),
   requireVerifiedInvestor,

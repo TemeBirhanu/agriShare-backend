@@ -44,8 +44,12 @@ export const createListing = asyncHandler(async (req, res) => {
     );
   }
 
+  const { assetId } = req.params;
+  if (!assetId || !mongoose.Types.ObjectId.isValid(assetId)) {
+    throw new ApiError(400, "Valid assetId is required");
+  }
+
   const {
-    assetId,
     investmentGoalBirr,
     sharesToSellPercent,
     expectedTotalYieldBirr,

@@ -8,7 +8,7 @@ import {
 import { asyncHandler } from "../utils/asyncHandler.js";
 
 router.post(
-  "/",
+  "/:listingId",
   protect,
   restrictTo("farmer"),
   asyncHandler(distributeProfits),
