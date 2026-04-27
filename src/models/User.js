@@ -87,6 +87,18 @@ const userSchema = new Schema(
       type: Boolean,
       default: false,
     },
+    emailVerified: {
+      type: Boolean,
+      default: function () {
+        return this.role === "admin";
+      },
+    },
+    emailVerifiedAt: {
+      type: Date,
+      default: function () {
+        return this.role === "admin" ? new Date() : null;
+      },
+    },
     verificationStatus: {
       type: String,
       enum: ["unverified", "pending", "verified", "rejected"],

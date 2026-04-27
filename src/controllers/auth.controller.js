@@ -1,7 +1,7 @@
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import User from "../models/User.js";
-import { generateToken } from "../utils/jwt.js";
+import { clearAuthCookie, generateToken, setAuthCookie } from "../utils/jwt.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { sendInvestorVerificationOtpEmail } from "../services/email.service.js";
 import {
@@ -17,6 +17,23 @@ import {
   hashEmailOtp,
 } from "../utils/otp.js";
 
+const isEmailOtpVerified = (user) => {
+  if (user.emailVerified) {
+    return true;
+  }
+
+  // Backward compatibility for older investor records.
+  if (
+    user.role === "investor" &&
+    user.isVerified &&
+    user.verificationStatus === "verified"
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
 const buildUserData = (user) => ({
   id: user._id,
   email: user.email,
@@ -30,12 +47,14 @@ const buildUserData = (user) => ({
   bio: user.bio,
   isActive: user.isActive,
   deactivatedAt: user.deactivatedAt,
+  emailVerified: user.emailVerified,
+  emailVerifiedAt: user.emailVerifiedAt,
   isVerified: user.isVerified,
   verificationStatus: user.verificationStatus,
   verificationRejectionReason: user.verificationRejectionReason,
 });
 
-const issueInvestorOtp = async (user) => {
+const issueEmailOtp = async (user) => {
   const otpCode = generateNumericOtp();
 
   user.emailVerificationCodeHash = hashEmailOtp(user.email, otpCode);
@@ -129,11 +148,11 @@ export const register = asyncHandler(async (req, res) => {
     await grantMonthlyCredits(user._id);
   }
 
-  if (isInvestor) {
+  if (isInvestor || isFarmer) {
     try {
-      await issueInvestorOtp(user);
+      await issueEmailOtp(user);
     } catch (error) {
-      console.error("Failed to send investor verification OTP email:", error);
+      console.error("Failed to send account verification OTP email:", error);
       await User.findByIdAndDelete(user._id).catch(() => null);
       throw new ApiError(
         500,
@@ -149,12 +168,13 @@ export const register = asyncHandler(async (req, res) => {
           email: user.email,
           user: buildUserData(user),
         },
-        "Investor registered successfully. Verify your email to continue",
+        "Account registered successfully. Verify your email to continue",
       ),
     );
   }
 
   const token = generateToken(user);
+  setAuthCookie(res, token);
 
   return res
     .status(201)
@@ -193,8 +213,8 @@ export const login = asyncHandler(async (req, res) => {
   }
 
   if (
-    user.role === "investor" &&
-    (!user.isVerified || user.verificationStatus !== "verified")
+    (user.role === "investor" || user.role === "farmer") &&
+    !isEmailOtpVerified(user)
   ) {
     throw new ApiError(
       403,
@@ -203,6 +223,7 @@ export const login = asyncHandler(async (req, res) => {
   }
 
   const token = generateToken(user);
+  setAuthCookie(res, token);
 
   // grant monthly credits if eligible (call on login to ensure regular check)
   if (user.role === "farmer") {
@@ -234,19 +255,19 @@ export const verifyInvestorEmailOtp = asyncHandler(async (req, res) => {
 
   const user = await User.findOne({
     email: normalizedEmail,
-    role: "investor",
+    role: { $in: ["investor", "farmer"] },
   }).select("+emailVerificationCodeHash");
 
   if (!user) {
-    throw new ApiError(404, "Investor account not found");
+    throw new ApiError(404, "Account not found");
   }
 
   if (!user.isActive) {
     throw new ApiError(403, "Account is inactive. Please contact support");
   }
 
-  if (user.isVerified && user.verificationStatus === "verified") {
-    throw new ApiError(400, "Investor email is already verified");
+  if (isEmailOtpVerified(user)) {
+    throw new ApiError(400, "Email is already verified");
   }
 
   if (!user.emailVerificationCodeHash || !user.emailVerificationCodeExpiresAt) {
@@ -279,9 +300,16 @@ export const verifyInvestorEmailOtp = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid verification code");
   }
 
-  user.isVerified = true;
-  user.verificationStatus = "verified";
-  user.verificationRejectionReason = undefined;
+  user.emailVerified = true;
+  user.emailVerifiedAt = new Date();
+
+  // Keep backward compatibility for investor records still relying on legacy fields.
+  if (user.role === "investor") {
+    user.isVerified = true;
+    user.verificationStatus = "verified";
+    user.verificationRejectionReason = undefined;
+  }
+
   user.emailVerificationCodeHash = null;
   user.emailVerificationCodeExpiresAt = null;
   user.emailVerificationLastSentAt = null;
@@ -289,6 +317,7 @@ export const verifyInvestorEmailOtp = asyncHandler(async (req, res) => {
   await user.save();
 
   const token = generateToken(user);
+  setAuthCookie(res, token);
 
   return res.json(
     new ApiResponse(
@@ -309,19 +338,19 @@ export const resendInvestorEmailOtp = asyncHandler(async (req, res) => {
   const normalizedEmail = String(email).trim().toLowerCase();
   const user = await User.findOne({
     email: normalizedEmail,
-    role: "investor",
+    role: { $in: ["investor", "farmer"] },
   }).select("+emailVerificationCodeHash");
 
   if (!user) {
-    throw new ApiError(404, "Investor account not found");
+    throw new ApiError(404, "Account not found");
   }
 
   if (!user.isActive) {
     throw new ApiError(403, "Account is inactive. Please contact support");
   }
 
-  if (user.isVerified && user.verificationStatus === "verified") {
-    throw new ApiError(400, "Investor email is already verified");
+  if (isEmailOtpVerified(user)) {
+    throw new ApiError(400, "Email is already verified");
   }
 
   const lastSentAt = user.emailVerificationLastSentAt
@@ -347,7 +376,7 @@ export const resendInvestorEmailOtp = asyncHandler(async (req, res) => {
   };
 
   try {
-    await issueInvestorOtp(user);
+    await issueEmailOtp(user);
   } catch (error) {
     user.emailVerificationCodeHash = previousOtpState.emailVerificationCodeHash;
     user.emailVerificationCodeExpiresAt =
@@ -378,10 +407,7 @@ export const resendInvestorEmailOtp = asyncHandler(async (req, res) => {
 });
 
 export const logout = asyncHandler(async (_req, res) => {
-  // Clear common cookie names if JWT is ever stored in cookies.
-  res.clearCookie("token");
-  res.clearCookie("jwt");
-  res.clearCookie("accessToken");
+  clearAuthCookie(res);
 
   return res.status(200).json(new ApiResponse(200, {}, "Logout successful"));
 });

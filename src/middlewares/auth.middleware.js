@@ -2,11 +2,18 @@ import jwt from "jsonwebtoken";
 import { ApiError } from "../utils/ApiError.js";
 import User from "../models/User.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { getAuthCookieName } from "../utils/jwt.js";
 
 const protect = asyncHandler(async (req, res, next) => {
   let token;
 
+  const cookieToken = req.cookies?.[getAuthCookieName()];
+  if (cookieToken) {
+    token = cookieToken;
+  }
+
   if (
+    !token &&
     req.headers.authorization &&
     req.headers.authorization.startsWith("Bearer")
   ) {
@@ -64,7 +71,10 @@ const requireVerifiedInvestor = (req, res, next) => {
     throw new ApiError(403, "Account is inactive. Please contact support");
   }
 
-  if (!req.user.isVerified || req.user.verificationStatus !== "verified") {
+  const isLegacyVerified =
+    req.user.isVerified && req.user.verificationStatus === "verified";
+
+  if (req.user.emailVerified !== true && !isLegacyVerified) {
     throw new ApiError(
       403,
       "Investor email is not verified. Please verify before continuing",
