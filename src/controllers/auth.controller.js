@@ -1,7 +1,7 @@
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import User from "../models/User.js";
-import { generateToken } from "../utils/jwt.js";
+import { clearAuthCookie, generateToken, setAuthCookie } from "../utils/jwt.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { sendInvestorVerificationOtpEmail } from "../services/email.service.js";
 import {
@@ -155,6 +155,7 @@ export const register = asyncHandler(async (req, res) => {
   }
 
   const token = generateToken(user);
+  setAuthCookie(res, token);
 
   return res
     .status(201)
@@ -203,6 +204,7 @@ export const login = asyncHandler(async (req, res) => {
   }
 
   const token = generateToken(user);
+  setAuthCookie(res, token);
 
   // grant monthly credits if eligible (call on login to ensure regular check)
   if (user.role === "farmer") {
@@ -289,6 +291,7 @@ export const verifyInvestorEmailOtp = asyncHandler(async (req, res) => {
   await user.save();
 
   const token = generateToken(user);
+  setAuthCookie(res, token);
 
   return res.json(
     new ApiResponse(
@@ -378,10 +381,7 @@ export const resendInvestorEmailOtp = asyncHandler(async (req, res) => {
 });
 
 export const logout = asyncHandler(async (_req, res) => {
-  // Clear common cookie names if JWT is ever stored in cookies.
-  res.clearCookie("token");
-  res.clearCookie("jwt");
-  res.clearCookie("accessToken");
+  clearAuthCookie(res);
 
   return res.status(200).json(new ApiResponse(200, {}, "Logout successful"));
 });
