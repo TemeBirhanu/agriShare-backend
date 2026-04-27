@@ -71,7 +71,10 @@ const requireVerifiedInvestor = (req, res, next) => {
     throw new ApiError(403, "Account is inactive. Please contact support");
   }
 
-  if (!req.user.isVerified || req.user.verificationStatus !== "verified") {
+  const isLegacyVerified =
+    req.user.isVerified && req.user.verificationStatus === "verified";
+
+  if (req.user.emailVerified !== true && !isLegacyVerified) {
     throw new ApiError(
       403,
       "Investor email is not verified. Please verify before continuing",
