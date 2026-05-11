@@ -15,6 +15,30 @@ cp .env.example .env
 npm run dev
 ```
 
+## Auth Password Reset
+
+Use this flow when a user forgets their password.
+
+### Endpoints
+
+#### 1) Request a reset link
+
+- **POST** `/api/auth/forgot-password`
+- Body:
+  - `email`
+
+The response is generic so the API does not reveal whether the email exists.
+
+#### 2) Complete the reset
+
+- **POST** `/api/auth/reset-password`
+- Body:
+  - `email`
+  - `token`
+  - `newPassword`
+
+The email contains a frontend link built from `PASSWORD_RESET_URL` in `.env` with `email` and `token` query parameters.
+
 ## Listing Update Timeline API
 
 Farmers can publish chronological listing updates (title, body, images, posted date) that are visible to all authenticated users.
