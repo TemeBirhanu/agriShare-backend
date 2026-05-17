@@ -39,6 +39,40 @@ The response is generic so the API does not reveal whether the email exists.
 
 The email contains a frontend link built from `PASSWORD_RESET_URL` in `.env` with `email` and `token` query parameters.
 
+## Asset Rejection And Resubmission
+
+When an admin rejects a cattle asset, the farmer can edit it and submit it again for review.
+
+### Behavior
+
+- Only rejected assets can be resubmitted.
+- Only the owning farmer can resubmit the asset.
+- The resubmission route keeps the asset in `pending` status until an admin reviews it again.
+- The previous rejection note is cleared when the asset is resubmitted.
+- You can update the same cattle fields used during creation and replace uploaded photos/documents if needed.
+
+### Endpoint
+
+- **POST** `/api/assets/:id/resubmit`
+- Auth: `Bearer <farmer_token>`
+- Content-Type: `multipart/form-data`
+- Fields:
+  - `name` (optional)
+  - `description` (optional)
+  - `location` or `kebele`, `woreda`, `zone`, `region` (optional, same shape as create)
+  - `livestockDetails` or `sex`, `purpose`, `identification`, `healthStatus` (optional, same shape as create)
+  - `photos` (optional, up to 5 files)
+  - `documents` (optional, up to 5 files)
+
+### Postman Test Flow
+
+1. Create a cattle asset with `POST /api/assets`.
+2. Log in as admin and reject that asset with `PATCH /api/assets/:id/verify` using `status=rejected` and a `comment`.
+3. Log back in as the same farmer.
+4. Call `POST /api/assets/:id/resubmit` with the same asset id and any updates you want to make.
+5. Confirm the response returns the asset in `pending` status.
+6. Log in as admin and fetch `GET /api/assets/pending` to verify the asset appears in the review queue again.
+
 ## Listing Update Timeline API
 
 Farmers can publish chronological listing updates (title, body, images, posted date) that are visible to all authenticated users.

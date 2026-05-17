@@ -3,6 +3,7 @@ import { protect, restrictTo } from "../middlewares/auth.middleware.js";
 import { upload } from "../middlewares/upload.middleware.js";
 import {
   createAsset,
+  resubmitRejectedAsset,
   getMyAssets,
   getPendingAssets,
   verifyAsset,
@@ -28,6 +29,16 @@ router.get(
   protect,
   restrictTo("farmer"),
   asyncHandler(getMyAssets),
+);
+router.post(
+  "/:id/resubmit",
+  protect,
+  restrictTo("farmer"),
+  upload.fields([
+    { name: "photos", maxCount: 5 },
+    { name: "documents", maxCount: 5 },
+  ]),
+  asyncHandler(resubmitRejectedAsset),
 );
 
 // Admin routes

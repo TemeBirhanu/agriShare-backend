@@ -83,6 +83,46 @@ const normalizeLivestockDetails = (body) => {
   };
 };
 
+const buildCattleAssetPayload = ({ body, user, files, existingAsset } = {}) => {
+  const photos =
+    files?.photos?.map((file) => ({
+      url: file.path,
+      description: "Uploaded photo",
+    })) || [];
+
+  const documents =
+    files?.documents?.map((file) => ({
+      type: "uploaded_document",
+      url: file.path,
+      originalName: file.originalname,
+    })) || [];
+
+  const nextPhotos =
+    photos.length > 0
+      ? photos
+      : parseMaybeJson(body.photos) || existingAsset?.photos || [];
+
+  const nextDocuments =
+    documents.length > 0
+      ? documents
+      : parseMaybeJson(body.documents) || existingAsset?.documents || [];
+
+  return {
+    type: "livestock",
+    name: body.name ?? existingAsset?.name,
+    description: body.description ?? existingAsset?.description,
+    location: normalizeLocation({ ...existingAsset?.location, ...body }),
+    photos: nextPhotos,
+    documents: nextDocuments,
+    livestockDetails: {
+      ...existingAsset?.livestockDetails,
+      ...normalizeLivestockDetails(body),
+    },
+    farmer: user?._id || existingAsset?.farmer,
+    status: "pending",
+  };
+};
+
 // Create asset
 const createAsset = asyncHandler(async (req, res) => {
   if (req.user.role !== "farmer") {
@@ -100,34 +140,13 @@ const createAsset = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Farmland assets are no longer supported");
   }
 
-  // Extract uploaded files
-  const photos =
-    req.files?.photos?.map((file) => ({
-      url: file.path,
-      description: "Uploaded photo",
-    })) || [];
-
-  const documents =
-    req.files?.documents?.map((file) => ({
-      type: "uploaded_document",
-      url: file.path,
-      originalName: file.originalname,
-    })) || [];
-
-  const assetData = {
-    type: "livestock",
-    name: req.body.name,
-    description: req.body.description,
-    location: normalizeLocation(req.body),
-    photos: photos.length > 0 ? photos : parseMaybeJson(req.body.photos),
-    documents:
-      documents.length > 0 ? documents : parseMaybeJson(req.body.documents),
-    livestockDetails: normalizeLivestockDetails(req.body),
-    farmer: req.user._id,
-    status: "pending",
-  };
-
-  const asset = await Asset.create(assetData);
+  const asset = await Asset.create(
+    buildCattleAssetPayload({
+      body: req.body,
+      user: req.user,
+      files: req.files,
+    }),
+  );
 
   await notifyRoleSafe("admin", {
     type: "asset_pending",
@@ -293,8 +312,72 @@ const verifyAsset = asyncHandler(async (req, res) => {
   return res.json(new ApiResponse(200, { asset }, message));
 });
 
+// Resubmit rejected asset (farmer owner only)
+const resubmitRejectedAsset = asyncHandler(async (req, res) => {
+  if (req.user.role !== "farmer") {
+    throw new ApiError(403, "Only farmers can resubmit assets");
+  }
+
+  const { id } = req.params;
+
+  const asset = await Asset.findById(id);
+  if (!asset) {
+    throw new ApiError(404, "Asset not found");
+  }
+
+  if (String(asset.farmer) !== String(req.user._id)) {
+    throw new ApiError(403, "You can only resubmit your own assets");
+  }
+
+  if (asset.status !== "rejected") {
+    throw new ApiError(400, "Only rejected assets can be resubmitted");
+  }
+
+  const nextAssetData = buildCattleAssetPayload({
+    body: req.body,
+    user: req.user,
+    files: req.files,
+    existingAsset: asset,
+  });
+
+  asset.name = nextAssetData.name;
+  asset.description = nextAssetData.description;
+  asset.location = nextAssetData.location;
+  asset.photos = nextAssetData.photos;
+  asset.documents = nextAssetData.documents;
+  asset.livestockDetails = nextAssetData.livestockDetails;
+  asset.status = "pending";
+  asset.verificationComment = undefined;
+  asset.verifiedBy = undefined;
+  asset.verifiedAt = undefined;
+
+  await asset.save();
+
+  await notifyRoleSafe("admin", {
+    type: "asset_resubmitted",
+    title: "Rejected Asset Resubmitted",
+    message: `Asset \"${asset.name}\" was updated and resubmitted for review`,
+    referenceId: asset._id,
+    referenceModel: "Asset",
+    meta: {
+      farmerId: req.user._id,
+      assetType: asset.type,
+      previousStatus: "rejected",
+    },
+  });
+
+  return res.json(
+    new ApiResponse(
+      200,
+      { asset },
+      "Asset resubmitted successfully and is pending verification",
+    ),
+  );
+});
+
 export {
   createAsset,
+  resubmitRejectedAsset,
   getMyAssets,
   getPendingAssets,
   verifyAsset,
