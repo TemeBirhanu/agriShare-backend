@@ -8,10 +8,96 @@ import {
 } from "../services/notification.service.js";
 // import { mintNFT } from "../services/blockchain.service.js"; // Assuming blockchain service is updated too or will be
 
+const parseMaybeJson = (value) => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return value;
+  }
+
+  if (
+    !trimmedValue.startsWith("{") &&
+    !trimmedValue.startsWith("[") &&
+    trimmedValue !== "true" &&
+    trimmedValue !== "false" &&
+    trimmedValue !== "null"
+  ) {
+    return value;
+  }
+
+  try {
+    return JSON.parse(trimmedValue);
+  } catch {
+    return value;
+  }
+};
+
+const normalizeLocation = (body) => {
+  const parsedLocation = parseMaybeJson(body.location);
+
+  if (parsedLocation && typeof parsedLocation === "object") {
+    return parsedLocation;
+  }
+
+  const parsedGps = parseMaybeJson(body.gps);
+
+  return {
+    kebele: body.kebele,
+    woreda: body.woreda,
+    zone: body.zone,
+    region: body.region,
+    ...(parsedGps && typeof parsedGps === "object" ? { gps: parsedGps } : {}),
+  };
+};
+
+const normalizeLivestockDetails = (body) => {
+  const parsedDetails = parseMaybeJson(body.livestockDetails);
+  const parsedIdentification = parseMaybeJson(
+    parsedDetails?.identification ?? body.identification,
+  );
+  const parsedHealthStatus = parseMaybeJson(
+    parsedDetails?.healthStatus ?? body.healthStatus,
+  );
+
+  return {
+    sex: parsedDetails?.sex ?? body.sex,
+    identification:
+      parsedIdentification && typeof parsedIdentification === "object"
+        ? parsedIdentification
+        : {
+            etLitsId: body.etLitsId,
+            localTag: body.localTag,
+          },
+    healthStatus:
+      parsedHealthStatus && typeof parsedHealthStatus === "object"
+        ? parsedHealthStatus
+        : {
+            vaccinated: body.vaccinated,
+            lastVaccinationDate: body.lastVaccinationDate,
+            diseasesTreated: body.diseasesTreated,
+          },
+    purpose: parsedDetails?.purpose ?? body.purpose,
+  };
+};
+
 // Create asset
 const createAsset = asyncHandler(async (req, res) => {
   if (req.user.role !== "farmer") {
     throw new ApiError(403, "Only farmers can create assets");
+  }
+
+  const assetType = String(req.body.type || "livestock")
+    .trim()
+    .toLowerCase();
+  if (assetType && assetType !== "livestock") {
+    throw new ApiError(400, "Only cattle assets are supported");
+  }
+
+  if (req.body.farmlandDetails || req.body.type === "farmland") {
+    throw new ApiError(400, "Farmland assets are no longer supported");
   }
 
   // Extract uploaded files
@@ -29,9 +115,14 @@ const createAsset = asyncHandler(async (req, res) => {
     })) || [];
 
   const assetData = {
-    ...req.body,
-    photos: photos.length > 0 ? photos : req.body.photos,
-    documents: documents.length > 0 ? documents : req.body.documents,
+    type: "livestock",
+    name: req.body.name,
+    description: req.body.description,
+    location: normalizeLocation(req.body),
+    photos: photos.length > 0 ? photos : parseMaybeJson(req.body.photos),
+    documents:
+      documents.length > 0 ? documents : parseMaybeJson(req.body.documents),
+    livestockDetails: normalizeLivestockDetails(req.body),
     farmer: req.user._id,
     status: "pending",
   };
@@ -173,7 +264,7 @@ const verifyAsset = asyncHandler(async (req, res) => {
   // if (status === "verified") {
   //   // Prepare simple metadata URI (later: real IPFS)
   //   const metadata = {
-  //     name: `${asset.type === "farmland" ? "Farmland" : "Livestock"} - ${asset.name}`,
+  //     name: `Livestock - ${asset.name}`,
   //     description: asset.description || "Asset tokenized on AgriShare",
   //     image: asset.photos?.[0]?.url || "https://via.placeholder.com/400", // placeholder
   //     attributes: [
@@ -183,7 +274,7 @@ const verifyAsset = asyncHandler(async (req, res) => {
   //         value: `${asset.location.region}, ${asset.location.woreda}`,
   //       },
 
-  //       // add more from farmlandDetails / livestockDetails later
+  //       // add more cattle details later
   //     ],
   //   };
 

@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test",
     "migrate:investors-verified": "node scripts/backfillInvestorVerification.js"
   },
   "repository": {

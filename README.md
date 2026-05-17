@@ -1,6 +1,6 @@
 # AgriShare Backend
 
-**Blockchain-based Farmland & Livestock Tokenization Platform**  
+**Blockchain-based Livestock Tokenization Platform**  
 Farmers tokenize yield rights → Investors buy fractional shares → Fiat payments only (Telebirr/Chapa)
 
 **Tech Stack**  
@@ -102,21 +102,41 @@ Investors who have purchased shares in a listing can post one text review per li
 
 #### 1) Post a review (investor only – must have invested)
 
-- **POST** `/api/listings/:id/reviews`
-- Auth: `Bearer <token>` (investor role required)
-- Content-Type: `application/json`
-- Body:
-  ```json
-  {
-    "body": "I invested in this farmland because the soil quality reports were impressive and the farmer has a strong track record."
-  }
-  ```
-- Success `201`:
-  ```json
-  {
-    "statusCode": 201,
-    "data": {
-      "review": {
+```json
+{
+  "body": "I invested in this livestock asset because the health checks and farmer track record were impressive."
+}
+```
+
+```json
+{
+  "statusCode": 201,
+  "data": {
+    "review": {
+      "_id": "<reviewId>",
+      "listing": "<listingId>",
+      "investor": {
+        "_id": "<userId>",
+        "fullName": "Abebe Kebede",
+        "profilePicture": null
+      },
+      "body": "I invested in this livestock asset because ...",
+      "createdAt": "2026-03-21T10:00:00.000Z",
+      "updatedAt": "2026-03-21T10:00:00.000Z"
+    }
+  },
+  "message": "Review posted successfully"
+}
+```
+
+#### 2) Get reviews for a listing (all authenticated users)
+
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "reviews": [
+      {
         "_id": "<reviewId>",
         "listing": "<listingId>",
         "investor": {
@@ -124,51 +144,22 @@ Investors who have purchased shares in a listing can post one text review per li
           "fullName": "Abebe Kebede",
           "profilePicture": null
         },
-        "body": "I invested in this farmland because ...",
+        "body": "I invested in this livestock asset because ...",
         "createdAt": "2026-03-21T10:00:00.000Z",
         "updatedAt": "2026-03-21T10:00:00.000Z"
       }
-    },
-    "message": "Review posted successfully"
-  }
-  ```
-
-#### 2) Get reviews for a listing (all authenticated users)
-
-- **GET** `/api/listings/:id/reviews?page=1&limit=10`
-- Auth: `Bearer <token>`
-- Query params: `page` (default 1), `limit` (default 10, max 50)
-- Returns reviews in chronological order (oldest first).
-- Success `200`:
-  ```json
-  {
-    "statusCode": 200,
-    "data": {
-      "reviews": [
-        {
-          "_id": "<reviewId>",
-          "listing": "<listingId>",
-          "investor": {
-            "_id": "<userId>",
-            "fullName": "Abebe Kebede",
-            "profilePicture": null
-          },
-          "body": "I invested in this farmland because ...",
-          "createdAt": "2026-03-21T10:00:00.000Z",
-          "updatedAt": "2026-03-21T10:00:00.000Z"
-        }
-      ],
-      "pagination": {
-        "page": 1,
-        "limit": 10,
-        "total": 1,
-        "totalPages": 1,
-        "hasMore": false
-      }
-    },
-    "message": "Reviews retrieved successfully"
-  }
-  ```
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 10,
+      "total": 1,
+      "totalPages": 1,
+      "hasMore": false
+    }
+  },
+  "message": "Reviews retrieved successfully"
+}
+```
 
 #### 3) Edit a review (investor owner only)
 
@@ -406,8 +397,8 @@ Sample response `200`:
     "items": [
       {
         "_id": "6612f4d040b23ed56f23aa10",
-        "type": "farmland",
-        "name": "Teff Plot - Gozamin",
+        "type": "livestock",
+        "name": "Ox #ET123 - Gozamin",
         "status": "pending",
         "createdAt": "2026-04-03T12:30:00.000Z",
         "farmer": {
