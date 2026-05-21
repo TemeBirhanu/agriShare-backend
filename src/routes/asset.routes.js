@@ -4,6 +4,7 @@ import { upload } from "../middlewares/upload.middleware.js";
 import {
   createAsset,
   resubmitRejectedAsset,
+  deleteAsset,
   getMyAssets,
   getPendingAssets,
   verifyAsset,
@@ -40,6 +41,7 @@ router.post(
   ]),
   asyncHandler(resubmitRejectedAsset),
 );
+router.delete("/:id", protect, restrictTo("farmer"), asyncHandler(deleteAsset));
 
 // Admin routes
 router.get(

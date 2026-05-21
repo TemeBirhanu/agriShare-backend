@@ -375,9 +375,42 @@ const resubmitRejectedAsset = asyncHandler(async (req, res) => {
   );
 });
 
+// Delete asset (farmer owner only)
+const deleteAsset = asyncHandler(async (req, res) => {
+  if (req.user.role !== "farmer") {
+    throw new ApiError(403, "Only farmers can delete assets");
+  }
+
+  const { id } = req.params;
+
+  const asset = await Asset.findById(id);
+  if (!asset) {
+    throw new ApiError(404, "Asset not found");
+  }
+
+  if (String(asset.farmer) !== String(req.user._id)) {
+    throw new ApiError(403, "You can only delete your own assets");
+  }
+
+  if (asset.currentListing) {
+    throw new ApiError(400, "Listed assets cannot be deleted");
+  }
+
+  await asset.deleteOne();
+
+  return res.json(
+    new ApiResponse(
+      200,
+      { deleted: true, assetId: asset._id },
+      "Asset deleted successfully",
+    ),
+  );
+});
+
 export {
   createAsset,
   resubmitRejectedAsset,
+  deleteAsset,
   getMyAssets,
   getPendingAssets,
   verifyAsset,

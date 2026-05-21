@@ -73,6 +73,30 @@ When an admin rejects a cattle asset, the farmer can edit it and submit it again
 5. Confirm the response returns the asset in `pending` status.
 6. Log in as admin and fetch `GET /api/assets/pending` to verify the asset appears in the review queue again.
 
+## Asset Delete
+
+Farmers can delete their own cattle assets before they are linked to a listing.
+
+### Behavior
+
+- Only the owner farmer can delete the asset.
+- Deleted assets are removed permanently from the database.
+- Assets that already have a listing attached cannot be deleted.
+
+### Endpoint
+
+- **DELETE** `/api/assets/:id`
+- Auth: `Bearer <farmer_token>`
+
+### Postman Test Flow
+
+1. Log in as a farmer and create a cattle asset with `POST /api/assets`.
+2. Copy the returned asset id.
+3. Call `DELETE /api/assets/:id` with the same farmer token.
+4. Confirm the response says `Asset deleted successfully`.
+5. Call `GET /api/assets/:id` and confirm it now returns `404 Asset not found`.
+6. Optional negative test: create or use an asset that is already listed, then call `DELETE /api/assets/:id` and confirm it returns `400 Listed assets cannot be deleted`.
+
 ## Listing Update Timeline API
 
 Farmers can publish chronological listing updates (title, body, images, posted date) that are visible to all authenticated users.
