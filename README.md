@@ -408,6 +408,7 @@ Admin dashboard and operations endpoints are available under `/api/admin`.
 - Listing risk queue supports filter query params:
   - `daysWindow` (default `10`)
   - `maxFundingProgressPercent` (default `80`, max `100`)
+- Payout deadline queue returns listings that are `payment_due` or `disputed`.
 - Refund operation endpoint wraps the platform refund service and supports:
   - `force` (default `true`)
   - `reason` (optional audit reason)
@@ -590,7 +591,43 @@ Sample response `200`:
 }
 ```
 
-#### 5) Investment analytics
+#### 5) Payout deadline queue
+
+- **GET** `/queues/payouts?page=1&limit=20`
+
+Sample response `200`:
+
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "total": 2,
+    "page": 1,
+    "limit": 20,
+    "hasNextPage": false,
+    "items": [
+      {
+        "_id": "6612f80a40b23ed56f23ac11",
+        "status": "payment_due",
+        "paymentDueAt": "2026-04-07T08:00:00.000Z",
+        "gracePeriodEndsAt": "2026-04-10T08:00:00.000Z",
+        "overdueDays": 1,
+        "farmer": {
+          "_id": "6612f19140b23ed56f23a990",
+          "firstName": "Abebe",
+          "lastName": "Kebede",
+          "email": "abebe@example.com",
+          "phone": "+251900000001"
+        }
+      }
+    ]
+  },
+  "message": "Payout deadline queue retrieved",
+  "success": true
+}
+```
+
+#### 6) Investment analytics
 
 - **GET** `/analytics/investments?days=30`
 

@@ -91,6 +91,18 @@ export const initializeSocketServer = (httpServer, { corsOrigins } = {}) => {
 
 export const getSocketServer = () => socketServer;
 
+export const closeSocketServer = async () => {
+  if (!socketServer) {
+    return;
+  }
+
+  await new Promise((resolve) => {
+    socketServer.close(() => resolve());
+  });
+
+  socketServer = null;
+};
+
 export const emitToUser = (userId, eventName, payload) => {
   if (!socketServer || !userId) {
     return false;

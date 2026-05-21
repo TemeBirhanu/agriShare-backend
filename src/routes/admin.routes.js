@@ -5,6 +5,7 @@ import {
   getVerificationQueue,
   getAssetQueue,
   getListingsRiskQueue,
+  getPayoutDeadlineQueue,
   getInvestmentAnalytics,
   getDistributionAnalytics,
   getCreditsAnalytics,
@@ -20,6 +21,7 @@ router.get("/dashboard/overview", getAdminDashboardOverview);
 router.get("/queues/verifications", getVerificationQueue);
 router.get("/queues/assets", getAssetQueue);
 router.get("/queues/listings-risk", getListingsRiskQueue);
+router.get("/queues/payouts", getPayoutDeadlineQueue);
 
 router.get("/analytics/investments", getInvestmentAnalytics);
 router.get("/analytics/distributions", getDistributionAnalytics);

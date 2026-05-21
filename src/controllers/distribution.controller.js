@@ -33,10 +33,7 @@ export const distributeProfits = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Listing is not ready for distribution");
   }
 
-  if (
-    Number(listing.totalInvestedBirr || 0) <
-    Number(listing.investmentGoalBirr || 0)
-  ) {
+  if (!["funded", "active", "payment_due"].includes(listing.status)) {
     throw new ApiError(400, "Funding goal has not been reached yet");
   }
 
@@ -113,6 +110,11 @@ export const distributeProfits = asyncHandler(async (req, res) => {
 
   // Close listing
   listing.status = "completed";
+  listing.paymentDueAt = null;
+  listing.gracePeriodEndsAt = null;
+  listing.paymentDueNotifiedAt = null;
+  listing.disputedAt = null;
+  listing.disputeReason = null;
   await listing.save();
 
   await InvestmentContract.updateMany(

@@ -22,6 +22,8 @@ const listingSchema = new Schema(
         "cancelled",
         "failed",
         "refunded",
+        "payment_due",
+        "disputed",
       ],
       default: "active",
       index: true,
@@ -106,6 +108,28 @@ const listingSchema = new Schema(
     },
     releasedToFarmerAt: {
       type: Date,
+      default: null,
+    },
+    paymentDueAt: {
+      type: Date,
+      default: null,
+    },
+    gracePeriodEndsAt: {
+      type: Date,
+      default: null,
+    },
+    paymentDueNotifiedAt: {
+      type: Date,
+      default: null,
+    },
+    disputedAt: {
+      type: Date,
+      default: null,
+    },
+    disputeReason: {
+      type: String,
+      trim: true,
+      maxlength: 300,
       default: null,
     },
     refundedAt: {
