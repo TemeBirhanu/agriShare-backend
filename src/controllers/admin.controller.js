@@ -57,6 +57,7 @@ export const getAdminDashboardOverview = asyncHandler(async (req, res) => {
     totalAdmins,
     pendingFarmerVerifications,
     pendingAssets,
+    paymentDueListings,
     listingStatusBreakdown,
     investmentTotals,
     refundedTotals,
@@ -70,6 +71,7 @@ export const getAdminDashboardOverview = asyncHandler(async (req, res) => {
     User.countDocuments({ role: "admin" }),
     FarmerVerification.countDocuments({ status: "pending" }),
     Asset.countDocuments({ status: "pending" }),
+    Listing.countDocuments({ status: { $in: ["payment_due", "disputed"] } }),
     Listing.aggregate([
       {
         $group: {
@@ -115,6 +117,8 @@ export const getAdminDashboardOverview = asyncHandler(async (req, res) => {
   const listingStatuses = {
     active: 0,
     funded: 0,
+    payment_due: 0,
+    disputed: 0,
     completed: 0,
     cancelled: 0,
     failed: 0,
@@ -147,6 +151,7 @@ export const getAdminDashboardOverview = asyncHandler(async (req, res) => {
     queues: {
       pendingFarmerVerifications,
       pendingAssets,
+      paymentDueListings,
     },
     listings: listingStatuses,
     investments: {
@@ -337,6 +342,80 @@ export const getListingsRiskQueue = asyncHandler(async (req, res) => {
         items,
       },
       "Listing risk queue retrieved",
+    ),
+  );
+});
+
+export const getPayoutDeadlineQueue = asyncHandler(async (req, res) => {
+  const page = parsePositiveInt(req.query.page, 1);
+  const limit = Math.min(parsePositiveInt(req.query.limit, 20), 100);
+  const skip = (page - 1) * limit;
+
+  const allowedStatuses = ["payment_due", "disputed", "all"];
+  const status = String(req.query.status || "all")
+    .trim()
+    .toLowerCase();
+
+  if (!allowedStatuses.includes(status)) {
+    throw new ApiError(400, "Invalid status filter");
+  }
+
+  const query = {
+    status: { $in: ["payment_due", "disputed"] },
+  };
+
+  if (status !== "all") {
+    query.status = status;
+  }
+
+  const [total, items] = await Promise.all([
+    Listing.countDocuments(query),
+    Listing.find(query)
+      .populate(
+        "farmer",
+        "firstName lastName email phone region zone woreda kebele",
+      )
+      .populate("asset", "name type")
+      .sort({ gracePeriodEndsAt: 1, paymentDueAt: 1, createdAt: 1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+  ]);
+
+  const now = new Date();
+  const normalizedItems = items.map((item) => {
+    const dueDate = item.effectivePaydayDate || item.paydayDate || null;
+    const dueDateValue = dueDate ? new Date(dueDate) : null;
+    const graceEndsValue = item.gracePeriodEndsAt
+      ? new Date(item.gracePeriodEndsAt)
+      : null;
+
+    return {
+      ...item,
+      dueDate,
+      daysSinceDue: dueDateValue
+        ? Math.max(
+            0,
+            Math.ceil((now.getTime() - dueDateValue.getTime()) / 86400000),
+          )
+        : null,
+      gracePeriodDaysRemaining: graceEndsValue
+        ? Math.ceil((graceEndsValue.getTime() - now.getTime()) / 86400000)
+        : null,
+    };
+  });
+
+  return res.json(
+    new ApiResponse(
+      200,
+      {
+        total,
+        page,
+        limit,
+        hasNextPage: skip + normalizedItems.length < total,
+        items: normalizedItems,
+      },
+      "Payout deadline queue retrieved",
     ),
   );
 });
