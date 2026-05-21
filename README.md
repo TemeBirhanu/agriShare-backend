@@ -314,6 +314,80 @@ Added the unread-count endpoint for badge display in the frontend ui. its respon
 
 All notification endpoints require bearer token authentication.
 
+### Real-Time Frontend Pattern
+
+For live notification updates without refresh, connect the frontend to Socket.IO after login and keep the REST endpoints as the initial fetch and fallback.
+
+Install the client package in the frontend:
+
+```bash
+npm install socket.io-client
+```
+
+Example React pattern:
+
+```javascript
+import { useEffect } from "react";
+import { io } from "socket.io-client";
+
+const SOCKET_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+export function useNotificationSocket({
+  token,
+  userId,
+  onNewNotification,
+  onUnreadCount,
+}) {
+  useEffect(() => {
+    if (!token || !userId) {
+      return undefined;
+    }
+
+    const socket = io(SOCKET_URL, {
+      auth: { token },
+      withCredentials: true,
+      transports: ["websocket"],
+    });
+
+    socket.on("connect", () => {
+      console.log("Socket connected", socket.id);
+    });
+
+    socket.on("notifications:connected", (payload) => {
+      console.log("Notifications channel ready", payload);
+    });
+
+    socket.on("notification:new", (notification) => {
+      onNewNotification?.(notification);
+    });
+
+    socket.on("notification:count", ({ unreadCount }) => {
+      onUnreadCount?.(unreadCount);
+    });
+
+    socket.on("disconnect", () => {
+      console.log("Socket disconnected");
+    });
+
+    socket.on("connect_error", (error) => {
+      console.error("Socket connection error", error.message);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [token, userId, onNewNotification, onUnreadCount]);
+}
+```
+
+Recommended frontend flow:
+
+1. After login, fetch notifications once with `GET /api/users/me/notifications` and `GET /api/users/me/notifications/unread-count`.
+2. Open the socket using the JWT in `auth.token`.
+3. Append each `notification:new` event to the list and increment the badge immediately.
+4. Replace the badge with the latest `notification:count` event whenever the backend sends it.
+5. Keep polling as a fallback only if the socket disconnects for a long time.
+
 ---
 
 ## Admin API
