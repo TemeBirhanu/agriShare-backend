@@ -10,8 +10,9 @@ const assetSchema = new Schema(
     },
     type: {
       type: String,
-      enum: ["farmland", "livestock"],
+      enum: ["livestock"],
       required: true,
+      default: "livestock",
     },
     name: {
       // e.g. "Dad's Teff Plot - Gozamin" or "Holstein-Friesian Cow #ET123"
@@ -49,7 +50,7 @@ const assetSchema = new Schema(
       type: Date,
     },
 
-    // common fields for both farmland and livestock
+    // common fields for cattle assets
     location: {
       kebele: { type: String, required: true },
       woreda: { type: String, required: true },
@@ -74,53 +75,14 @@ const assetSchema = new Schema(
       },
     ],
 
-    // farmland-specific fields (only required if type === "farmland")
-    farmlandDetails: {
-      type: {
-        sizeHa: { type: Number, min: 0.01 }, // in hectares (common unit in Ethiopia)
-        soilType: {
-          type: String,
-          enum: [
-            "black_soil",
-            "red_soil",
-            "vertisol",
-            "andosol",
-            "fluvisol",
-            "other",
-          ],
-        },
-        fertilityGrade: {
-          type: String,
-          enum: ["high", "medium", "low"],
-        },
-        mainCrops: [{ type: String }], // e.g. ["teff", "maize", "wheat"]
-        irrigation: {
-          type: Boolean,
-          default: false,
-        },
-        landHoldingCertificateNumber: { type: String }, // First or second-level cert number
-        holdingType: {
-          type: String,
-          enum: ["individual", "joint", "family", "communal_use_right"],
-        },
-        coHolders: [{ type: String }], // names of spouse/family if joint
-      },
-    },
-
-    //livestock-specific fields
+    // cattle-specific fields
     livestockDetails: {
       type: {
-        species: {
-          type: String,
-          enum: ["cattle", "sheep", "goat", "camel", "other"],
-          required: true,
-        },
-        breed: { type: String }, // e.g. "Boran", "Horro", "local indigenous", "Holstein cross"
         sex: {
           type: String,
           enum: ["male", "female", "castrated"],
+          required: true,
         },
-        ageYears: { type: Number, min: 0 },
         identification: {
           etLitsId: { type: String }, // ET-LITS ear tag / national ID if registered
           localTag: { type: String }, // farmer's own tag/number
@@ -134,7 +96,6 @@ const assetSchema = new Schema(
           type: String,
           enum: ["dairy", "meat", "breeding", "draught", "multiple"],
         },
-        quantity: { type: Number, min: 1, default: 1 }, // e.g. herd of 5 sheep
       },
     },
     currentListing: {
@@ -156,17 +117,17 @@ const assetSchema = new Schema(
   },
   {
     timestamps: true,
-    discriminatorKey: "type", // if you want to use discriminators later
   },
 );
 
-// Validation to ensure farmland assets have size and livestock assets have species
+// Validation to ensure only cattle assets are stored and the minimal livestock details exist
 assetSchema.pre("save", async function () {
-  if (this.type === "farmland" && !this.farmlandDetails?.sizeHa) {
-    throw new Error("Farmland size in hectares is required");
+  if (this.type !== "livestock") {
+    throw new Error("Only livestock assets are supported");
   }
-  if (this.type === "livestock" && !this.livestockDetails?.species) {
-    throw new Error("Livestock species is required");
+
+  if (!this.livestockDetails?.sex) {
+    throw new Error("Livestock sex is required");
   }
 });
 

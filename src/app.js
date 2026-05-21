@@ -4,6 +4,7 @@ import helmet from "helmet";
 import morgan from "morgan";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
+import { createServer } from "http";
 
 dotenv.config();
 
@@ -20,8 +21,10 @@ import farmerVerificationRoutes from "./routes/farmerVerification.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import paymentRoutes from "./routes/payment.routes.js";
 import { startFundingLifecycleScheduler } from "./services/scheduler.service.js";
+import { initializeSocketServer } from "./services/socket.service.js";
 
 const app = express();
+const httpServer = createServer(app);
 const PORT = process.env.PORT || 5000;
 
 // Security & logging middleware
@@ -76,7 +79,8 @@ app.use(errorHandler);
 const startServer = async () => {
   await connectDB();
   startFundingLifecycleScheduler();
-  app.listen(PORT, () => {
+  initializeSocketServer(httpServer, { corsOrigins: allowedOrigins });
+  httpServer.listen(PORT, () => {
     console.log(`✅ Server running on http://localhost:${PORT}`);
     console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
   });
