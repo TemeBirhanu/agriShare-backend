@@ -29,12 +29,14 @@ const createAsset = asyncHandler(async (req, res) => {
     })) || [];
 
   const assetData = {
-    ...req.body,
+    ...JSON.parse(req.body.assetData),
     photos: photos.length > 0 ? photos : req.body.photos,
     documents: documents.length > 0 ? documents : req.body.documents,
     farmer: req.user._id,
     status: "pending",
   };
+
+  // console.log(JSON.parse(req.body.assetData), "Request body in controller");
 
   const asset = await Asset.create(assetData);
 

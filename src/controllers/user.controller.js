@@ -147,13 +147,16 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
   ];
   const updatePayload = {};
 
+  const data = JSON.parse(req.body.data || "{}");
+
+
   allowedFields.forEach((field) => {
-    if (req.body[field] !== undefined) {
-      updatePayload[field] = req.body[field];
+    if (data[field] !== undefined) {
+      updatePayload[field] = data[field];
     }
   });
 
-  const locationPayload = getLocationPayload(req.body);
+  const locationPayload = getLocationPayload(data);
   const locationFieldsInRequest = Object.keys(locationPayload);
 
   if (req.user.role !== "farmer" && locationFieldsInRequest.length > 0) {

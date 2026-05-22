@@ -26,6 +26,7 @@ const parsePagination = (query) => {
 
 export const createReview = asyncHandler(async (req, res) => {
   const listing = await Listing.findById(req.params.id).select("_id");
+
   if (!listing) {
     throw new ApiError(404, "Listing not found");
   }

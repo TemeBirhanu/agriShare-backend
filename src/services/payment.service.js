@@ -177,10 +177,14 @@ export const verifyChapaTransaction = async (txRef) => {
   });
 
   const paymentStatus = String(response?.data?.status || "").toLowerCase();
-  const isSuccessful = ["success", "successful", "completed", "paid"].includes(
-    paymentStatus,
-  );
-
+  const isSuccessful = [
+    "success",
+    "successful",
+    "completed",
+    "paid",
+    "pending",
+  ].includes(paymentStatus);
+  console.log({ paymentStatus, isSuccessful });
   return {
     response,
     paymentStatus,

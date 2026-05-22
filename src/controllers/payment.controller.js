@@ -176,7 +176,6 @@ export const initiateDeposit = asyncHandler(async (req, res) => {
 
 export const verifyDepositByTxRef = asyncHandler(async (req, res) => {
   const { txRef } = req.params;
-
   const payment = await PaymentTransaction.findOne({
     txRef,
     type: "deposit",
@@ -194,8 +193,40 @@ export const verifyDepositByTxRef = asyncHandler(async (req, res) => {
   }
 
   const verification = await verifyChapaTransaction(txRef);
+  /*
+  {
+  response: {
+    message: 'Payment details fetched successfully',
+    status: 'success',
+    data: {
+      first_name: 'Lemma',
+      last_name: 'Getiye',
+      email: 'getiyelemma061@gmail.com',
+      phone_number: '251925752767',
+      currency: 'ETB',
+      amount: 1000,
+      charge: null,
+      mode: 'test',
+      method: null,
+      type: 'Unknown',
+      status: 'pending',
+      reference: null,
+      tx_ref: 'AGR-DEP-d6593e-1779430051656-MI6V6J',
+      customization: [Object],
+      meta: null,
+      created_at: '2026-05-22T06:07:35.000000Z',
+      updated_at: '2026-05-22T06:07:35.000000Z'
+    }
+  },
+  paymentStatus: 'pending',
+  isSuccessful: false,
+  providerReference: 'AGR-DEP-d6593e-1779430051656-MI6V6J',
+  failureReason: 'Payment details fetched successfully'
+}
+  */
 
   if (!verification.isSuccessful) {
+    console.log("FAiled verification");
     if (payment.status !== "successful") {
       payment.status = "failed";
       payment.failureReason =
@@ -227,7 +258,11 @@ export const verifyDepositByTxRef = asyncHandler(async (req, res) => {
   } finally {
     await session.endSession();
   }
-
+  console.log(settlement, "settlement", {
+    payment: settlement.payment,
+    walletBalance: settlement.walletBalance,
+    alreadySettled: settlement.alreadySettled,
+  });
   return res.json(
     new ApiResponse(
       200,

@@ -12,7 +12,7 @@ import { addCredits, deductCredits } from "../services/agriCredits.service.js";
 const roundBirr = (value) =>
   Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 
-const getFundingMetrics = (listingDoc) => {
+const getFundingMetrics = async (listingDoc) => {
   const listing =
     typeof listingDoc.toObject === "function"
       ? listingDoc.toObject()
@@ -21,9 +21,12 @@ const getFundingMetrics = (listingDoc) => {
   const goal = Number(listing.investmentGoalBirr || 0);
   const invested = Number(listing.totalInvestedBirr || 0);
   const progressPercent = goal > 0 ? Math.min((invested / goal) * 100, 100) : 0;
-
+  const sharesPurchasedByInvestorShareOwnership = await ShareOwnership.find({
+    listing: listing._id,
+  });
   return {
     ...listing,
+    investorsCount: sharesPurchasedByInvestorShareOwnership.length,
     investmentProgressPercent: Number(progressPercent.toFixed(2)),
     fundingRemainingBirr: Number(Math.max(goal - invested, 0).toFixed(2)),
     isDeadlinePassed: listing.investmentDeadline
@@ -48,7 +51,6 @@ export const createListing = asyncHandler(async (req, res) => {
   if (!assetId || !mongoose.Types.ObjectId.isValid(assetId)) {
     throw new ApiError(400, "Valid assetId is required");
   }
-
   const {
     investmentGoalBirr,
     sharesToSellPercent,
@@ -90,7 +92,9 @@ export const createListing = asyncHandler(async (req, res) => {
   if (parsedInvestmentDeadline <= new Date()) {
     throw new ApiError(400, "investmentDeadline must be in the future");
   }
-
+  // For fixed payout, paydayDate is required and must be after investmentDeadline
+  // For offset payout, payoffDaysFromRelease is required and must be a positive integer
+  //TODO: for fixed we are getting null fix this
   let parsedPaydayDate = null;
   let normalizedPayoffDaysFromRelease = null;
 
@@ -256,7 +260,7 @@ export const createListing = asyncHandler(async (req, res) => {
     .json(
       new ApiResponse(
         201,
-        { listing: getFundingMetrics(listing) },
+        { listing: await getFundingMetrics(listing) },
         "Asset listed for investment successfully",
       ),
     );
@@ -268,12 +272,17 @@ export const getActiveListings = asyncHandler(async (req, res) => {
     .populate("farmer", "fullName profilePicture")
     .sort({ createdAt: -1 });
 
-  const listingsWithFunding = listings.map(getFundingMetrics);
-
+  const listingsWithFunding = await Promise.all(
+    listings.map(getFundingMetrics),
+  );
   return res.json(
     new ApiResponse(
       200,
-      { listings: listingsWithFunding, count: listingsWithFunding.length },
+      {
+        listings: listingsWithFunding,
+        count: listingsWithFunding.length,
+        // investors: sharesPurchasedByInvestorShareOwnership.length,
+      },
       "Active listings retrieved",
     ),
   );
@@ -285,7 +294,9 @@ export const getAllListings = asyncHandler(async (req, res) => {
     .populate("farmer", "fullName profilePicture")
     .sort({ createdAt: -1 });
 
-  const listingsWithFunding = listings.map(getFundingMetrics);
+  const listingsWithFunding = await Promise.all(
+    listings.map(getFundingMetrics),
+  );
 
   return res.json(
     new ApiResponse(
@@ -305,7 +316,9 @@ export const getMyListings = asyncHandler(async (req, res) => {
     .populate("asset")
     .sort({ createdAt: -1 });
 
-  const listingsWithFunding = listings.map(getFundingMetrics);
+  const listingsWithFunding = await Promise.all(
+    listings.map(getFundingMetrics),
+  );
 
   return res.json(
     new ApiResponse(
@@ -332,7 +345,7 @@ export const getListingById = asyncHandler(async (req, res) => {
   return res.json(
     new ApiResponse(
       200,
-      { listing: getFundingMetrics(listing) },
+      { listing: await getFundingMetrics(listing) },
       "Listing details retrieved",
     ),
   );
