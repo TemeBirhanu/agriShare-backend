@@ -38,13 +38,22 @@ const getSmtpTransporter = () => {
   return smtpTransporter;
 };
 
+const getAppName = () => "AgriShare";
+
+const buildResetPasswordLink = ({ resetLink, email, token }) => {
+  const url = new URL(resetLink);
+  url.searchParams.set("email", email);
+  url.searchParams.set("token", token);
+  return url.toString();
+};
+
 export const sendInvestorVerificationOtpEmail = async ({
   to,
   firstName,
   otpCode,
   expiresInMinutes,
 }) => {
-  const appName = "AgriShare";
+  const appName = getAppName();
   const displayName = String(firstName || "Investor").trim();
 
   const text = [
@@ -71,6 +80,52 @@ export const sendInvestorVerificationOtpEmail = async ({
     from: process.env.SMTP_FROM,
     to,
     subject: `${appName} email verification code`,
+    text,
+    html,
+  });
+};
+
+export const sendPasswordResetEmail = async ({
+  to,
+  firstName,
+  resetLink,
+  email,
+  token,
+  expiresInMinutes,
+}) => {
+  const appName = getAppName();
+  const displayName = String(firstName || "User").trim();
+  const resetUrl = buildResetPasswordLink({ resetLink, email, token });
+
+  const text = [
+    `Hi ${displayName},`,
+    "",
+    `We received a request to reset your ${appName} password.`,
+    `Use this link to set a new password: ${resetUrl}`,
+    `This link expires in ${expiresInMinutes} minutes.`,
+    "",
+    "If you did not request a password reset, you can ignore this email.",
+  ].join("\n");
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="margin-bottom: 12px;">Reset Your ${appName} Password</h2>
+      <p>Hi ${displayName},</p>
+      <p>We received a request to reset your password.</p>
+      <p>
+        <a href="${resetUrl}" style="display: inline-block; padding: 12px 18px; background: #0f766e; color: #ffffff; text-decoration: none; border-radius: 8px;">
+          Reset Password
+        </a>
+      </p>
+      <p>This link expires in <strong>${expiresInMinutes} minutes</strong>.</p>
+      <p>If you did not request a password reset, you can ignore this email.</p>
+    </div>
+  `;
+
+  return getSmtpTransporter().sendMail({
+    from: process.env.SMTP_FROM,
+    to,
+    subject: `${appName} password reset link`,
     text,
     html,
   });

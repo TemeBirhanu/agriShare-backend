@@ -8,37 +8,145 @@ import {
 } from "../services/notification.service.js";
 // import { mintNFT } from "../services/blockchain.service.js"; // Assuming blockchain service is updated too or will be
 
+const parseMaybeJson = (value) => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return value;
+  }
+
+  if (
+    !trimmedValue.startsWith("{") &&
+    !trimmedValue.startsWith("[") &&
+    trimmedValue !== "true" &&
+    trimmedValue !== "false" &&
+    trimmedValue !== "null"
+  ) {
+    return value;
+  }
+
+  try {
+    return JSON.parse(trimmedValue);
+  } catch {
+    return value;
+  }
+};
+
+const normalizeLocation = (body) => {
+  const parsedLocation = parseMaybeJson(body.location);
+
+  if (parsedLocation && typeof parsedLocation === "object") {
+    return parsedLocation;
+  }
+
+  const parsedGps = parseMaybeJson(body.gps);
+
+  return {
+    kebele: body.kebele,
+    woreda: body.woreda,
+    zone: body.zone,
+    region: body.region,
+    ...(parsedGps && typeof parsedGps === "object" ? { gps: parsedGps } : {}),
+  };
+};
+
+const normalizeLivestockDetails = (body) => {
+  const parsedDetails = parseMaybeJson(body.livestockDetails);
+  const parsedIdentification = parseMaybeJson(
+    parsedDetails?.identification ?? body.identification,
+  );
+  const parsedHealthStatus = parseMaybeJson(
+    parsedDetails?.healthStatus ?? body.healthStatus,
+  );
+
+  return {
+    sex: parsedDetails?.sex ?? body.sex,
+    identification:
+      parsedIdentification && typeof parsedIdentification === "object"
+        ? parsedIdentification
+        : {
+            etLitsId: body.etLitsId,
+            localTag: body.localTag,
+          },
+    healthStatus:
+      parsedHealthStatus && typeof parsedHealthStatus === "object"
+        ? parsedHealthStatus
+        : {
+            vaccinated: body.vaccinated,
+            lastVaccinationDate: body.lastVaccinationDate,
+            diseasesTreated: body.diseasesTreated,
+          },
+    purpose: parsedDetails?.purpose ?? body.purpose,
+  };
+};
+
+const buildCattleAssetPayload = ({ body, user, files, existingAsset } = {}) => {
+  const photos =
+    files?.photos?.map((file) => ({
+      url: file.path,
+      description: "Uploaded photo",
+    })) || [];
+
+  const documents =
+    files?.documents?.map((file) => ({
+      type: "uploaded_document",
+      url: file.path,
+      originalName: file.originalname,
+    })) || [];
+
+  const nextPhotos =
+    photos.length > 0
+      ? photos
+      : parseMaybeJson(body.photos) || existingAsset?.photos || [];
+
+  const nextDocuments =
+    documents.length > 0
+      ? documents
+      : parseMaybeJson(body.documents) || existingAsset?.documents || [];
+
+  return {
+    type: "livestock",
+    name: body.name ?? existingAsset?.name,
+    description: body.description ?? existingAsset?.description,
+    location: normalizeLocation({ ...existingAsset?.location, ...body }),
+    photos: nextPhotos,
+    documents: nextDocuments,
+    livestockDetails: {
+      ...existingAsset?.livestockDetails,
+      ...normalizeLivestockDetails(body),
+    },
+    farmer: user?._id || existingAsset?.farmer,
+    status: "pending",
+  };
+};
+
 // Create asset
 const createAsset = asyncHandler(async (req, res) => {
   if (req.user.role !== "farmer") {
     throw new ApiError(403, "Only farmers can create assets");
   }
 
-  // Extract uploaded files
-  const photos =
-    req.files?.photos?.map((file) => ({
-      url: file.path,
-      description: "Uploaded photo",
-    })) || [];
+  const assetType = String(req.body.type || "livestock")
+    .trim()
+    .toLowerCase();
+  if (assetType && assetType !== "livestock") {
+    throw new ApiError(400, "Only cattle assets are supported");
+  }
 
-  const documents =
-    req.files?.documents?.map((file) => ({
-      type: "uploaded_document",
-      url: file.path,
-      originalName: file.originalname,
-    })) || [];
+  if (req.body.farmlandDetails || req.body.type === "farmland") {
+    throw new ApiError(400, "Farmland assets are no longer supported");
+  }
 
-  const assetData = {
-    ...JSON.parse(req.body.assetData),
-    photos: photos.length > 0 ? photos : req.body.photos,
-    documents: documents.length > 0 ? documents : req.body.documents,
-    farmer: req.user._id,
-    status: "pending",
-  };
-
-  // console.log(JSON.parse(req.body.assetData), "Request body in controller");
-
-  const asset = await Asset.create(assetData);
+  const asset = await Asset.create(
+    buildCattleAssetPayload({
+      body: req.body,
+      user: req.user,
+      files: req.files,
+    }),
+  );
 
   await notifyRoleSafe("admin", {
     type: "asset_pending",
@@ -175,7 +283,7 @@ const verifyAsset = asyncHandler(async (req, res) => {
   // if (status === "verified") {
   //   // Prepare simple metadata URI (later: real IPFS)
   //   const metadata = {
-  //     name: `${asset.type === "farmland" ? "Farmland" : "Livestock"} - ${asset.name}`,
+  //     name: `Livestock - ${asset.name}`,
   //     description: asset.description || "Asset tokenized on AgriShare",
   //     image: asset.photos?.[0]?.url || "https://via.placeholder.com/400", // placeholder
   //     attributes: [
@@ -185,7 +293,7 @@ const verifyAsset = asyncHandler(async (req, res) => {
   //         value: `${asset.location.region}, ${asset.location.woreda}`,
   //       },
 
-  //       // add more from farmlandDetails / livestockDetails later
+  //       // add more cattle details later
   //     ],
   //   };
 
@@ -204,8 +312,105 @@ const verifyAsset = asyncHandler(async (req, res) => {
   return res.json(new ApiResponse(200, { asset }, message));
 });
 
+// Resubmit rejected asset (farmer owner only)
+const resubmitRejectedAsset = asyncHandler(async (req, res) => {
+  if (req.user.role !== "farmer") {
+    throw new ApiError(403, "Only farmers can resubmit assets");
+  }
+
+  const { id } = req.params;
+
+  const asset = await Asset.findById(id);
+  if (!asset) {
+    throw new ApiError(404, "Asset not found");
+  }
+
+  if (String(asset.farmer) !== String(req.user._id)) {
+    throw new ApiError(403, "You can only resubmit your own assets");
+  }
+
+  if (asset.status !== "rejected") {
+    throw new ApiError(400, "Only rejected assets can be resubmitted");
+  }
+
+  const nextAssetData = buildCattleAssetPayload({
+    body: req.body,
+    user: req.user,
+    files: req.files,
+    existingAsset: asset,
+  });
+
+  asset.name = nextAssetData.name;
+  asset.description = nextAssetData.description;
+  asset.location = nextAssetData.location;
+  asset.photos = nextAssetData.photos;
+  asset.documents = nextAssetData.documents;
+  asset.livestockDetails = nextAssetData.livestockDetails;
+  asset.status = "pending";
+  asset.verificationComment = undefined;
+  asset.verifiedBy = undefined;
+  asset.verifiedAt = undefined;
+
+  await asset.save();
+
+  await notifyRoleSafe("admin", {
+    type: "asset_resubmitted",
+    title: "Rejected Asset Resubmitted",
+    message: `Asset \"${asset.name}\" was updated and resubmitted for review`,
+    referenceId: asset._id,
+    referenceModel: "Asset",
+    meta: {
+      farmerId: req.user._id,
+      assetType: asset.type,
+      previousStatus: "rejected",
+    },
+  });
+
+  return res.json(
+    new ApiResponse(
+      200,
+      { asset },
+      "Asset resubmitted successfully and is pending verification",
+    ),
+  );
+});
+
+// Delete asset (farmer owner only)
+const deleteAsset = asyncHandler(async (req, res) => {
+  if (req.user.role !== "farmer") {
+    throw new ApiError(403, "Only farmers can delete assets");
+  }
+
+  const { id } = req.params;
+
+  const asset = await Asset.findById(id);
+  if (!asset) {
+    throw new ApiError(404, "Asset not found");
+  }
+
+  if (String(asset.farmer) !== String(req.user._id)) {
+    throw new ApiError(403, "You can only delete your own assets");
+  }
+
+  if (asset.currentListing) {
+    throw new ApiError(400, "Listed assets cannot be deleted");
+  }
+
+  await asset.deleteOne();
+
+  return res.json(
+    new ApiResponse(
+      200,
+      { deleted: true, assetId: asset._id },
+      "Asset deleted successfully",
+    ),
+  );
+});
+
 export {
   createAsset,
+  resubmitRejectedAsset,
+  deleteAsset,
   getMyAssets,
   getPendingAssets,
   verifyAsset,

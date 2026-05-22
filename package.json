@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test",
     "migrate:investors-verified": "node scripts/backfillInvestorVerification.js"
   },
   "repository": {
@@ -37,7 +37,8 @@
     "multer": "^2.1.1",
     "multer-storage-cloudinary": "^4.0.0",
     "nodemailer": "^8.0.2",
-    "package": "^1.0.1"
+    "package": "^1.0.1",
+    "socket.io": "^4.8.3"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^6.1.2",

@@ -124,6 +124,19 @@ const userSchema = new Schema(
       default: 0,
       min: 0,
     },
+    passwordResetTokenHash: {
+      type: String,
+      default: null,
+      select: false,
+    },
+    passwordResetTokenExpiresAt: {
+      type: Date,
+      default: null,
+    },
+    passwordResetLastSentAt: {
+      type: Date,
+      default: null,
+    },
     verificationRejectionReason: {
       type: String,
       trim: true,

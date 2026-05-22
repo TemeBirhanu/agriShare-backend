@@ -4,6 +4,8 @@ import helmet from "helmet";
 import morgan from "morgan";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
+import { createServer } from "http";
+import mongoose from "mongoose";
 
 dotenv.config();
 
@@ -19,10 +21,19 @@ import creditsRoutes from "./routes/credits.routes.js";
 import farmerVerificationRoutes from "./routes/farmerVerification.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import paymentRoutes from "./routes/payment.routes.js";
-import { startFundingLifecycleScheduler } from "./services/scheduler.service.js";
+import {
+  startFundingLifecycleScheduler,
+  stopFundingLifecycleScheduler,
+} from "./services/scheduler.service.js";
+import {
+  closeSocketServer,
+  initializeSocketServer,
+} from "./services/socket.service.js";
 
 const app = express();
+const httpServer = createServer(app);
 const PORT = process.env.PORT || 5000;
+let shuttingDown = false;
 
 // Security & logging middleware
 app.use(helmet());
@@ -76,10 +87,43 @@ app.use(errorHandler);
 const startServer = async () => {
   await connectDB();
   startFundingLifecycleScheduler();
-  app.listen(PORT, () => {
+  initializeSocketServer(httpServer, { corsOrigins: allowedOrigins });
+  httpServer.listen(PORT, () => {
     console.log(`✅ Server running on http://localhost:${PORT}`);
     console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
   });
 };
+
+const shutdown = async (signal) => {
+  if (shuttingDown) {
+    return;
+  }
+
+  shuttingDown = true;
+  console.log(`[Shutdown] Received ${signal}, closing server...`);
+
+  try {
+    stopFundingLifecycleScheduler();
+    await closeSocketServer();
+    await new Promise((resolve) => httpServer.close(resolve));
+    await mongoose.disconnect();
+  } catch (error) {
+    console.error("[Shutdown] Error while closing server", error);
+  } finally {
+    process.exit(0);
+  }
+};
+
+process.once("SIGINT", () => {
+  shutdown("SIGINT").catch(() => null);
+});
+
+process.once("SIGTERM", () => {
+  shutdown("SIGTERM").catch(() => null);
+});
+
+process.once("SIGUSR2", () => {
+  shutdown("SIGUSR2").catch(() => null);
+});
 
 startServer();

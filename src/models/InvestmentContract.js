@@ -40,6 +40,16 @@ const investmentContractSchema = new Schema(
       enum: ["active", "completed", "disputed", "refunded"],
       default: "active",
     },
+    disputedAt: {
+      type: Date,
+      default: null,
+    },
+    disputeReason: {
+      type: String,
+      trim: true,
+      maxlength: 300,
+      default: null,
+    },
     refundedAt: {
       type: Date,
       default: null,

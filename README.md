@@ -1,6 +1,6 @@
 # AgriShare Backend
 
-**Blockchain-based Farmland & Livestock Tokenization Platform**  
+**Blockchain-based Livestock Tokenization Platform**  
 Farmers tokenize yield rights → Investors buy fractional shares → Fiat payments only (Telebirr/Chapa)
 
 **Tech Stack**  
@@ -14,6 +14,88 @@ cp .env.example .env
 # Fill MONGO_URI and PRIVATE_KEY
 npm run dev
 ```
+
+## Auth Password Reset
+
+Use this flow when a user forgets their password.
+
+### Endpoints
+
+#### 1) Request a reset link
+
+- **POST** `/api/auth/forgot-password`
+- Body:
+  - `email`
+
+The response is generic so the API does not reveal whether the email exists.
+
+#### 2) Complete the reset
+
+- **POST** `/api/auth/reset-password`
+- Body:
+  - `email`
+  - `token`
+  - `newPassword`
+
+The email contains a frontend link built from `PASSWORD_RESET_URL` in `.env` with `email` and `token` query parameters.
+
+## Asset Rejection And Resubmission
+
+When an admin rejects a cattle asset, the farmer can edit it and submit it again for review.
+
+### Behavior
+
+- Only rejected assets can be resubmitted.
+- Only the owning farmer can resubmit the asset.
+- The resubmission route keeps the asset in `pending` status until an admin reviews it again.
+- The previous rejection note is cleared when the asset is resubmitted.
+- You can update the same cattle fields used during creation and replace uploaded photos/documents if needed.
+
+### Endpoint
+
+- **POST** `/api/assets/:id/resubmit`
+- Auth: `Bearer <farmer_token>`
+- Content-Type: `multipart/form-data`
+- Fields:
+  - `name` (optional)
+  - `description` (optional)
+  - `location` or `kebele`, `woreda`, `zone`, `region` (optional, same shape as create)
+  - `livestockDetails` or `sex`, `purpose`, `identification`, `healthStatus` (optional, same shape as create)
+  - `photos` (optional, up to 5 files)
+  - `documents` (optional, up to 5 files)
+
+### Postman Test Flow
+
+1. Create a cattle asset with `POST /api/assets`.
+2. Log in as admin and reject that asset with `PATCH /api/assets/:id/verify` using `status=rejected` and a `comment`.
+3. Log back in as the same farmer.
+4. Call `POST /api/assets/:id/resubmit` with the same asset id and any updates you want to make.
+5. Confirm the response returns the asset in `pending` status.
+6. Log in as admin and fetch `GET /api/assets/pending` to verify the asset appears in the review queue again.
+
+## Asset Delete
+
+Farmers can delete their own cattle assets before they are linked to a listing.
+
+### Behavior
+
+- Only the owner farmer can delete the asset.
+- Deleted assets are removed permanently from the database.
+- Assets that already have a listing attached cannot be deleted.
+
+### Endpoint
+
+- **DELETE** `/api/assets/:id`
+- Auth: `Bearer <farmer_token>`
+
+### Postman Test Flow
+
+1. Log in as a farmer and create a cattle asset with `POST /api/assets`.
+2. Copy the returned asset id.
+3. Call `DELETE /api/assets/:id` with the same farmer token.
+4. Confirm the response says `Asset deleted successfully`.
+5. Call `GET /api/assets/:id` and confirm it now returns `404 Asset not found`.
+6. Optional negative test: create or use an asset that is already listed, then call `DELETE /api/assets/:id` and confirm it returns `400 Listed assets cannot be deleted`.
 
 ## Listing Update Timeline API
 
@@ -78,21 +160,41 @@ Investors who have purchased shares in a listing can post one text review per li
 
 #### 1) Post a review (investor only – must have invested)
 
-- **POST** `/api/listings/:id/reviews`
-- Auth: `Bearer <token>` (investor role required)
-- Content-Type: `application/json`
-- Body:
-  ```json
-  {
-    "body": "I invested in this farmland because the soil quality reports were impressive and the farmer has a strong track record."
-  }
-  ```
-- Success `201`:
-  ```json
-  {
-    "statusCode": 201,
-    "data": {
-      "review": {
+```json
+{
+  "body": "I invested in this livestock asset because the health checks and farmer track record were impressive."
+}
+```
+
+```json
+{
+  "statusCode": 201,
+  "data": {
+    "review": {
+      "_id": "<reviewId>",
+      "listing": "<listingId>",
+      "investor": {
+        "_id": "<userId>",
+        "fullName": "Abebe Kebede",
+        "profilePicture": null
+      },
+      "body": "I invested in this livestock asset because ...",
+      "createdAt": "2026-03-21T10:00:00.000Z",
+      "updatedAt": "2026-03-21T10:00:00.000Z"
+    }
+  },
+  "message": "Review posted successfully"
+}
+```
+
+#### 2) Get reviews for a listing (all authenticated users)
+
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "reviews": [
+      {
         "_id": "<reviewId>",
         "listing": "<listingId>",
         "investor": {
@@ -100,51 +202,22 @@ Investors who have purchased shares in a listing can post one text review per li
           "fullName": "Abebe Kebede",
           "profilePicture": null
         },
-        "body": "I invested in this farmland because ...",
+        "body": "I invested in this livestock asset because ...",
         "createdAt": "2026-03-21T10:00:00.000Z",
         "updatedAt": "2026-03-21T10:00:00.000Z"
       }
-    },
-    "message": "Review posted successfully"
-  }
-  ```
-
-#### 2) Get reviews for a listing (all authenticated users)
-
-- **GET** `/api/listings/:id/reviews?page=1&limit=10`
-- Auth: `Bearer <token>`
-- Query params: `page` (default 1), `limit` (default 10, max 50)
-- Returns reviews in chronological order (oldest first).
-- Success `200`:
-  ```json
-  {
-    "statusCode": 200,
-    "data": {
-      "reviews": [
-        {
-          "_id": "<reviewId>",
-          "listing": "<listingId>",
-          "investor": {
-            "_id": "<userId>",
-            "fullName": "Abebe Kebede",
-            "profilePicture": null
-          },
-          "body": "I invested in this farmland because ...",
-          "createdAt": "2026-03-21T10:00:00.000Z",
-          "updatedAt": "2026-03-21T10:00:00.000Z"
-        }
-      ],
-      "pagination": {
-        "page": 1,
-        "limit": 10,
-        "total": 1,
-        "totalPages": 1,
-        "hasMore": false
-      }
-    },
-    "message": "Reviews retrieved successfully"
-  }
-  ```
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 10,
+      "total": 1,
+      "totalPages": 1,
+      "hasMore": false
+    }
+  },
+  "message": "Reviews retrieved successfully"
+}
+```
 
 #### 3) Edit a review (investor owner only)
 
@@ -241,6 +314,80 @@ Added the unread-count endpoint for badge display in the frontend ui. its respon
 
 All notification endpoints require bearer token authentication.
 
+### Real-Time Frontend Pattern
+
+For live notification updates without refresh, connect the frontend to Socket.IO after login and keep the REST endpoints as the initial fetch and fallback.
+
+Install the client package in the frontend:
+
+```bash
+npm install socket.io-client
+```
+
+Example React pattern:
+
+```javascript
+import { useEffect } from "react";
+import { io } from "socket.io-client";
+
+const SOCKET_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+export function useNotificationSocket({
+  token,
+  userId,
+  onNewNotification,
+  onUnreadCount,
+}) {
+  useEffect(() => {
+    if (!token || !userId) {
+      return undefined;
+    }
+
+    const socket = io(SOCKET_URL, {
+      auth: { token },
+      withCredentials: true,
+      transports: ["websocket"],
+    });
+
+    socket.on("connect", () => {
+      console.log("Socket connected", socket.id);
+    });
+
+    socket.on("notifications:connected", (payload) => {
+      console.log("Notifications channel ready", payload);
+    });
+
+    socket.on("notification:new", (notification) => {
+      onNewNotification?.(notification);
+    });
+
+    socket.on("notification:count", ({ unreadCount }) => {
+      onUnreadCount?.(unreadCount);
+    });
+
+    socket.on("disconnect", () => {
+      console.log("Socket disconnected");
+    });
+
+    socket.on("connect_error", (error) => {
+      console.error("Socket connection error", error.message);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [token, userId, onNewNotification, onUnreadCount]);
+}
+```
+
+Recommended frontend flow:
+
+1. After login, fetch notifications once with `GET /api/users/me/notifications` and `GET /api/users/me/notifications/unread-count`.
+2. Open the socket using the JWT in `auth.token`.
+3. Append each `notification:new` event to the list and increment the badge immediately.
+4. Replace the badge with the latest `notification:count` event whenever the backend sends it.
+5. Keep polling as a fallback only if the socket disconnects for a long time.
+
 ---
 
 ## Admin API
@@ -261,6 +408,7 @@ Admin dashboard and operations endpoints are available under `/api/admin`.
 - Listing risk queue supports filter query params:
   - `daysWindow` (default `10`)
   - `maxFundingProgressPercent` (default `80`, max `100`)
+- Payout deadline queue returns listings that are `payment_due` or `disputed`.
 - Refund operation endpoint wraps the platform refund service and supports:
   - `force` (default `true`)
   - `reason` (optional audit reason)
@@ -382,8 +530,8 @@ Sample response `200`:
     "items": [
       {
         "_id": "6612f4d040b23ed56f23aa10",
-        "type": "farmland",
-        "name": "Teff Plot - Gozamin",
+        "type": "livestock",
+        "name": "Ox #ET123 - Gozamin",
         "status": "pending",
         "createdAt": "2026-04-03T12:30:00.000Z",
         "farmer": {
@@ -443,7 +591,43 @@ Sample response `200`:
 }
 ```
 
-#### 5) Investment analytics
+#### 5) Payout deadline queue
+
+- **GET** `/queues/payouts?page=1&limit=20`
+
+Sample response `200`:
+
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "total": 2,
+    "page": 1,
+    "limit": 20,
+    "hasNextPage": false,
+    "items": [
+      {
+        "_id": "6612f80a40b23ed56f23ac11",
+        "status": "payment_due",
+        "paymentDueAt": "2026-04-07T08:00:00.000Z",
+        "gracePeriodEndsAt": "2026-04-10T08:00:00.000Z",
+        "overdueDays": 1,
+        "farmer": {
+          "_id": "6612f19140b23ed56f23a990",
+          "firstName": "Abebe",
+          "lastName": "Kebede",
+          "email": "abebe@example.com",
+          "phone": "+251900000001"
+        }
+      }
+    ]
+  },
+  "message": "Payout deadline queue retrieved",
+  "success": true
+}
+```
+
+#### 6) Investment analytics
 
 - **GET** `/analytics/investments?days=30`
 

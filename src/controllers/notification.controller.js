@@ -2,6 +2,7 @@ import Notification from "../models/Notification.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { emitUnreadNotificationCount } from "../services/notification.service.js";
 
 export const getMyNotifications = asyncHandler(async (req, res) => {
   const pageRaw = Number.parseInt(req.query.page, 10);
@@ -83,6 +84,8 @@ export const markNotificationAsRead = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Notification not found");
   }
 
+  await emitUnreadNotificationCount(req.user._id);
+
   return res.json(
     new ApiResponse(200, { notification }, "Notification marked as read"),
   );
@@ -93,6 +96,8 @@ export const markAllNotificationsAsRead = asyncHandler(async (req, res) => {
     { recipient: req.user._id, isRead: false },
     { $set: { isRead: true, readAt: new Date() } },
   );
+
+  await emitUnreadNotificationCount(req.user._id);
 
   return res.json(
     new ApiResponse(
@@ -113,6 +118,8 @@ export const deleteNotification = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Notification not found");
   }
 
+  await emitUnreadNotificationCount(req.user._id);
+
   return res.json(
     new ApiResponse(200, { deleted: true }, "Notification deleted"),
   );
@@ -129,6 +136,8 @@ export const clearMyNotifications = asyncHandler(async (req, res) => {
   }
 
   const result = await Notification.deleteMany(query);
+
+  await emitUnreadNotificationCount(req.user._id);
 
   return res.json(
     new ApiResponse(

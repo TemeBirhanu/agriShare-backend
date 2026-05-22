@@ -3,11 +3,15 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import User from "../models/User.js";
 import { clearAuthCookie, generateToken, setAuthCookie } from "../utils/jwt.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { sendInvestorVerificationOtpEmail } from "../services/email.service.js";
+import {
+  sendInvestorVerificationOtpEmail,
+  sendPasswordResetEmail,
+} from "../services/email.service.js";
 import {
   grantSignupBonus,
   grantMonthlyCredits,
 } from "../services/agriCredits.service.js";
+import { createHash, randomBytes } from "crypto";
 import {
   OTP_EXPIRY_MINUTES,
   OTP_MAX_ATTEMPTS,
@@ -16,6 +20,21 @@ import {
   getOtpExpiryDate,
   hashEmailOtp,
 } from "../utils/otp.js";
+
+const PASSWORD_RESET_TOKEN_EXPIRY_MINUTES = Number(
+  process.env.PASSWORD_RESET_TOKEN_EXPIRY_MINUTES || 30,
+);
+const PASSWORD_RESET_RESEND_COOLDOWN_MS = Number(
+  process.env.PASSWORD_RESET_RESEND_COOLDOWN_MS || 60 * 1000,
+);
+
+const hashPasswordResetToken = (token) =>
+  createHash("sha256").update(String(token)).digest("hex");
+
+const generatePasswordResetToken = () => randomBytes(32).toString("hex");
+
+const getPasswordResetExpiryDate = () =>
+  new Date(Date.now() + PASSWORD_RESET_TOKEN_EXPIRY_MINUTES * 60 * 1000);
 
 const isEmailOtpVerified = (user) => {
   if (user.emailVerified) {
@@ -69,6 +88,17 @@ const issueEmailOtp = async (user) => {
     otpCode,
     expiresInMinutes: OTP_EXPIRY_MINUTES,
   });
+};
+
+const issuePasswordResetToken = async (user) => {
+  const resetToken = generatePasswordResetToken();
+
+  user.passwordResetTokenHash = hashPasswordResetToken(resetToken);
+  user.passwordResetTokenExpiresAt = getPasswordResetExpiryDate();
+  user.passwordResetLastSentAt = new Date();
+  await user.save();
+
+  return resetToken;
 };
 
 export const register = asyncHandler(async (req, res) => {
@@ -404,6 +434,147 @@ export const resendInvestorEmailOtp = asyncHandler(async (req, res) => {
       "Verification code sent successfully",
     ),
   );
+});
+
+export const forgotPassword = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    throw new ApiError(400, "Email is required");
+  }
+
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const user = await User.findOne({ email: normalizedEmail }).select(
+    "+passwordResetTokenHash",
+  );
+
+  if (!user) {
+    throw new ApiError(404, "Email not found");
+  }
+
+  if (!user.isActive) {
+    throw new ApiError(403, "Account is inactive. Please contact support");
+  }
+
+  const lastSentAt = user.passwordResetLastSentAt
+    ? new Date(user.passwordResetLastSentAt).getTime()
+    : null;
+
+  if (
+    lastSentAt &&
+    Date.now() - lastSentAt < PASSWORD_RESET_RESEND_COOLDOWN_MS
+  ) {
+    const waitSeconds = Math.ceil(
+      (PASSWORD_RESET_RESEND_COOLDOWN_MS - (Date.now() - lastSentAt)) / 1000,
+    );
+
+    throw new ApiError(
+      429,
+      `Please wait ${waitSeconds} seconds before requesting another reset link`,
+    );
+  }
+
+  const previousResetState = {
+    passwordResetTokenHash: user.passwordResetTokenHash,
+    passwordResetTokenExpiresAt: user.passwordResetTokenExpiresAt,
+    passwordResetLastSentAt: user.passwordResetLastSentAt,
+  };
+
+  const resetUrl = process.env.PASSWORD_RESET_URL;
+  if (!resetUrl) {
+    throw new ApiError(
+      500,
+      "Password reset URL is not configured. Please contact support",
+    );
+  }
+
+  let resetToken;
+
+  try {
+    resetToken = await issuePasswordResetToken(user);
+
+    await sendPasswordResetEmail({
+      to: user.email,
+      firstName: user.firstName,
+      resetLink: resetUrl,
+      email: user.email,
+      token: resetToken,
+      expiresInMinutes: PASSWORD_RESET_TOKEN_EXPIRY_MINUTES,
+    });
+  } catch (error) {
+    user.passwordResetTokenHash = previousResetState.passwordResetTokenHash;
+    user.passwordResetTokenExpiresAt =
+      previousResetState.passwordResetTokenExpiresAt;
+    user.passwordResetLastSentAt = previousResetState.passwordResetLastSentAt;
+    await user.save().catch(() => null);
+
+    throw new ApiError(
+      500,
+      "Failed to send password reset email. Please try again",
+    );
+  }
+
+  return res.json(
+    new ApiResponse(
+      200,
+      {
+        email: user.email,
+        expiresInMinutes: PASSWORD_RESET_TOKEN_EXPIRY_MINUTES,
+        resendAvailableInSeconds: PASSWORD_RESET_RESEND_COOLDOWN_MS / 1000,
+      },
+      "Password reset link sent successfully",
+    ),
+  );
+});
+
+export const resetPassword = asyncHandler(async (req, res) => {
+  const { email, token, newPassword } = req.body;
+
+  if (!email || !token || !newPassword) {
+    throw new ApiError(400, "Email, token and new password are required");
+  }
+
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const normalizedToken = String(token).trim();
+  const nextPassword = String(newPassword);
+
+  if (normalizedToken.length < 32) {
+    throw new ApiError(400, "Invalid or expired reset token");
+  }
+
+  if (nextPassword.length < 6) {
+    throw new ApiError(400, "Password must be at least 6 characters long");
+  }
+
+  const user = await User.findOne({ email: normalizedEmail }).select(
+    "+passwordResetTokenHash +password",
+  );
+
+  if (!user || !user.isActive) {
+    throw new ApiError(400, "Invalid or expired reset token");
+  }
+
+  if (
+    !user.passwordResetTokenHash ||
+    !user.passwordResetTokenExpiresAt ||
+    new Date(user.passwordResetTokenExpiresAt).getTime() < Date.now()
+  ) {
+    throw new ApiError(400, "Invalid or expired reset token");
+  }
+
+  const incomingTokenHash = hashPasswordResetToken(normalizedToken);
+  if (incomingTokenHash !== user.passwordResetTokenHash) {
+    throw new ApiError(400, "Invalid or expired reset token");
+  }
+
+  user.password = nextPassword;
+  user.passwordResetTokenHash = null;
+  user.passwordResetTokenExpiresAt = null;
+  user.passwordResetLastSentAt = null;
+
+  await user.save();
+
+  return res.json(new ApiResponse(200, {}, "Password reset successfully"));
 });
 
 export const logout = asyncHandler(async (_req, res) => {
