@@ -172,7 +172,7 @@ export const getListingUpdates = asyncHandler(async (req, res) => {
     ),
   );
 });
-
+//TODO: the payday for offset is disturbing the flow here and also for delete
 export const updateListingUpdate = asyncHandler(async (req, res) => {
   ensureFarmer(req.user);
 
@@ -232,13 +232,29 @@ export const updateListingUpdate = asyncHandler(async (req, res) => {
     hasChanges = true;
   }
 
+  let existingImages = [];
+  if (req.body.existingImages !== undefined) {
+    try {
+      existingImages =
+        typeof req.body.existingImages === "string"
+          ? JSON.parse(req.body.existingImages)
+          : req.body.existingImages;
+      if (!Array.isArray(existingImages)) {
+        existingImages = [];
+      }
+    } catch (e) {
+      existingImages = [];
+    }
+  }
+
   const uploadedImages = mapUpdateImages(req.files);
-  if (uploadedImages.length > 0) {
-    if (uploadedImages.length > 3) {
+  if (req.body.existingImages !== undefined || uploadedImages.length > 0) {
+    const totalImages = [...existingImages, ...uploadedImages];
+    if (totalImages.length > 3) {
       throw new ApiError(400, "A listing update can include at most 3 images");
     }
 
-    update.images = uploadedImages;
+    update.images = totalImages;
     hasChanges = true;
   }
 

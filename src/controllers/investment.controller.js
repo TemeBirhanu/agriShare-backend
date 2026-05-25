@@ -307,14 +307,14 @@ export const getMyActiveInvestments = asyncHandler(async (req, res) => {
     .populate({
       path: "listing",
       select:
-        "investmentGoalBirr totalInvestedBirr sharesToSellPercent expectedTotalYieldBirr paydayDate effectivePaydayDate investmentDeadline status",
+        "investmentGoalBirr totalInvestedBirr sharesToSellPercent expectedTotalYieldBirr paydayDate effectivePaydayDate investmentDeadline status sharePricePerTokenBirr",
       populate: {
         path: "asset",
-        select: "name type",
+        select: "name type photos",
       },
     })
     .sort({ purchasedAt: -1 });
-
+  console.log("Active investments retrieved:", investments);
   res.json(new ApiResponse(200, { investments }, "Active investments"));
 });
 
@@ -326,10 +326,11 @@ export const getMyHistory = asyncHandler(async (req, res) => {
   })
     .populate({
       path: "listing",
-      select: "investmentGoalBirr expectedTotalYieldBirr",
+      select:
+        "investmentGoalBirr expectedTotalYieldBirr sharePricePerTokenBirr",
       populate: {
         path: "asset",
-        select: "name",
+        select: "name photos",
       },
     })
     .sort({ purchasedAt: -1 });
@@ -561,7 +562,7 @@ export const getPendingInvestorRefundRequestsForAdmin = asyncHandler(
     const [total, refundRequests] = await Promise.all([
       InvestorRefundRequest.countDocuments(query),
       InvestorRefundRequest.find(query)
-        .populate("investor", "firstName lastName email phone")
+        .populate("investor", "firstName lastName email phone profilePicture")
         .populate("farmer", "firstName lastName email phone")
         .populate(
           "listing",

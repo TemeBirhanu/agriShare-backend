@@ -1,5 +1,7 @@
 import express from "express";
 import { protect, restrictTo } from "../middlewares/auth.middleware.js";
+import { upload } from "../middlewares/upload.middleware.js";
+
 import {
   getAllUsers,
   getFarmerDashboard,
@@ -23,7 +25,7 @@ import {
 const router = express.Router();
 
 router.get("/me", protect, getMyProfile);
-router.patch("/me", protect, updateMyProfile);
+router.patch("/me", protect, upload.single("profilePicture"), updateMyProfile);
 router.patch("/me/password", protect, changeMyPassword);
 router.delete("/me", protect, deactivateMyAccount);
 router.get("/me/notifications", protect, getMyNotifications);

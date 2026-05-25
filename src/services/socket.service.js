@@ -25,6 +25,12 @@ const getTokenFromSocket = (socket) => {
   return null;
 };
 
+const getUserIdFromSocket = (socket) => {
+  return (
+    socket.handshake.query?.userId || socket.handshake.auth?.userId || null
+  );
+};
+
 const parseSocketCorsOrigins = (corsOrigins) => {
   if (Array.isArray(corsOrigins) && corsOrigins.length > 0) {
     return corsOrigins;
@@ -41,7 +47,7 @@ export const initializeSocketServer = (httpServer, { corsOrigins } = {}) => {
     },
   });
 
-  socketServer.use(async (socket, next) => {
+  /* socketServer.use(async (socket, next) => {
     try {
       const token = getTokenFromSocket(socket);
       if (!token) {
@@ -71,6 +77,36 @@ export const initializeSocketServer = (httpServer, { corsOrigins } = {}) => {
       }
 
       return next(new Error("Not authorized - invalid token"));
+    }
+  });*/
+
+  socketServer.use(async (socket, next) => {
+    try {
+      const userId = getUserIdFromSocket(socket);
+
+      if (!userId) {
+        return next(new Error("Not authorized - no userId provided"));
+      }
+
+      const user = await User.findById(userId).select("_id role isActive");
+
+      if (!user) {
+        return next(new Error("User not found"));
+      }
+
+      if (!user.isActive) {
+        return next(new Error("Account is inactive"));
+      }
+
+      socket.data.user = {
+        id: String(user._id),
+        role: user.role,
+      };
+
+      return next();
+    } catch (error) {
+      console.error("Socket auth error:", error);
+      return next(new Error("Authentication failed"));
     }
   });
 

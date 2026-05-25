@@ -56,7 +56,6 @@ export const getMyProfile = asyncHandler(async (req, res) => {
   if (!user) {
     throw new ApiError(404, "User not found");
   }
-
   return res.json(
     new ApiResponse(200, { user }, "Current user fetched successfully"),
   );
@@ -137,7 +136,8 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
   if (!user) {
     throw new ApiError(404, "User not found");
   }
-
+  const profilePicture = req.file ? req.file.path : undefined;
+  console.log("Received profile picture file:", req.file, profilePicture);
   const allowedFields = [
     "firstName",
     "lastName",
@@ -149,6 +149,7 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
 
   const data = JSON.parse(req.body.data || "{}");
 
+  if (profilePicture) data.profilePicture = profilePicture;
 
   allowedFields.forEach((field) => {
     if (data[field] !== undefined) {
