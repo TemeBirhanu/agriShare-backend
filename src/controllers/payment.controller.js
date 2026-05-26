@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import PaymentTransaction from "../models/PaymentTransaction.js";
 import User from "../models/User.js";
 import CreditTransaction from "../models/CreditTransaction.js";
+import TransactionHistory from "../models/TransactionHistory.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -14,6 +15,7 @@ import {
   verifyChapaWebhookSignature,
 } from "../services/payment.service.js";
 import { createNotificationSafe } from "../services/notification.service.js";
+import { recordTransactionHistory } from "../services/transactionHistory.service.js";
 
 const roundBirr = (value) =>
   Math.round((Number(value) + Number.EPSILON) * 100) / 100;
@@ -32,6 +34,106 @@ const parsePositiveInt = (value, fallback) => {
     return fallback;
   }
   return parsed;
+};
+
+const parseBundlePriceBirr = (description, fallback = null) => {
+  const match = String(description || "").match(
+    /for\s+([0-9]+(?:\.[0-9]+)?)\s+Birr/i,
+  );
+  if (!match) {
+    return fallback;
+  }
+
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const normalizeTransactionKey = (transaction) =>
+  [
+    transaction.sourceModel || transaction.collectionName || "unknown",
+    transaction.sourceId
+      ? String(transaction.sourceId)
+      : transaction.referenceCode || transaction.txRef || transaction._id,
+    transaction.category || transaction.type || "unknown",
+  ].join(":");
+
+const normalizeUnifiedTransaction = (transaction) => ({
+  ...transaction,
+  _id: transaction._id,
+  createdAt: transaction.createdAt,
+  updatedAt: transaction.updatedAt || transaction.createdAt,
+});
+
+const normalizeHistoryTransaction = (transaction) =>
+  normalizeUnifiedTransaction({
+    _id: transaction._id,
+    user: transaction.user,
+    category: transaction.category,
+    direction: transaction.direction,
+    status: transaction.status,
+    amountBirr: transaction.amountBirr,
+    currency: transaction.currency,
+    title: transaction.title,
+    description: transaction.description,
+    sourceModel: transaction.sourceModel,
+    sourceId: transaction.sourceId,
+    referenceCode: transaction.referenceCode,
+    metadata: transaction.metadata,
+    createdAt: transaction.createdAt,
+    updatedAt: transaction.updatedAt,
+  });
+
+const normalizePaymentTransaction = (transaction) =>
+  normalizeUnifiedTransaction({
+    _id: transaction._id,
+    user: transaction.user,
+    category: transaction.type,
+    direction: transaction.type === "deposit" ? "credit" : "debit",
+    status: transaction.status,
+    amountBirr: transaction.amountBirr,
+    currency: transaction.currency,
+    title:
+      transaction.type === "deposit" ? "Wallet Deposit" : "Wallet Withdrawal",
+    description:
+      transaction.type === "deposit"
+        ? `Wallet deposit via ${String(
+            transaction.provider || "provider",
+          ).toUpperCase()}`
+        : "Wallet withdrawal",
+    sourceModel: "PaymentTransaction",
+    sourceId: transaction._id,
+    referenceCode: transaction.txRef,
+    metadata: transaction.metadata,
+    createdAt: transaction.createdAt,
+    updatedAt: transaction.updatedAt,
+  });
+
+const normalizeCreditPurchaseTransaction = (transaction) => {
+  const priceBirr = parseBundlePriceBirr(transaction.description, null);
+  if (!Number.isFinite(priceBirr)) {
+    return null;
+  }
+
+  return normalizeUnifiedTransaction({
+    _id: transaction._id,
+    user: transaction.user,
+    category: "agri_credit_purchase",
+    direction: "debit",
+    status: "successful",
+    amountBirr: priceBirr,
+    currency: "ETB",
+    title: "AgriCredits Purchase",
+    description: transaction.description,
+    sourceModel: "CreditTransaction",
+    sourceId: transaction._id,
+    referenceCode: String(transaction._id),
+    metadata: {
+      creditsAmount: transaction.amount,
+      balanceAfter: transaction.balanceAfter,
+    },
+    createdAt: transaction.createdAt,
+    updatedAt: transaction.updatedAt,
+  });
 };
 
 const isTransactionNotSupportedError = (error) =>
@@ -88,6 +190,26 @@ const settleDepositSuccess = async (payment, providerData, session = null) => {
       },
     ],
     withSession(session),
+  );
+
+  await recordTransactionHistory(
+    {
+      user: paymentDoc.user,
+      category: "deposit",
+      direction: "credit",
+      amountBirr: paymentDoc.amountBirr,
+      status: "successful",
+      title: "Wallet Deposit",
+      description: `Wallet deposit via ${paymentDoc.provider.toUpperCase()}`,
+      sourceModel: "PaymentTransaction",
+      sourceId: paymentDoc._id,
+      referenceCode: paymentDoc.txRef,
+      metadata: {
+        provider: paymentDoc.provider,
+        providerReference: paymentDoc.providerReference || null,
+      },
+    },
+    session,
   );
 
   paymentDoc.status = "successful";
@@ -461,6 +583,27 @@ export const requestWithdrawal = asyncHandler(async (req, res) => {
         referenceModel: "PaymentTransaction",
       });
 
+      await recordTransactionHistory(
+        {
+          user: req.user._id,
+          category: "withdrawal",
+          direction: "debit",
+          amountBirr,
+          status: "successful",
+          title: "Wallet Withdrawal",
+          description: `Wallet withdrawal to bank (${bankCode})`,
+          sourceModel: "PaymentTransaction",
+          sourceId: payment._id,
+          referenceCode: txRef,
+          metadata: {
+            provider: payment.provider,
+            bankCode,
+            bankName,
+          },
+        },
+        session,
+      );
+
       await createNotificationSafe({
         recipient: req.user._id,
         type: "wallet_withdrawal_success",
@@ -523,7 +666,6 @@ export const requestWithdrawal = asyncHandler(async (req, res) => {
 export const getMyPaymentTransactions = asyncHandler(async (req, res) => {
   const page = parsePositiveInt(req.query.page, 1);
   const limit = Math.min(parsePositiveInt(req.query.limit, 20), 100);
-  const skip = (page - 1) * limit;
 
   const type = String(req.query.type || "all")
     .trim()
@@ -532,27 +674,71 @@ export const getMyPaymentTransactions = asyncHandler(async (req, res) => {
     .trim()
     .toLowerCase();
 
-  const query = { user: req.user._id };
+  const [historyTransactions, paymentTransactions, creditTransactions] =
+    await Promise.all([
+      TransactionHistory.find({ user: req.user._id }).sort({ createdAt: -1 }),
+      PaymentTransaction.find({ user: req.user._id }).sort({ createdAt: -1 }),
+      CreditTransaction.find({ user: req.user._id, type: "purchase" }).sort({
+        createdAt: -1,
+      }),
+    ]);
 
-  if (["deposit", "withdrawal"].includes(type)) {
-    query.type = type;
+  const combinedTransactions = [];
+  const seenKeys = new Set();
+
+  for (const transaction of historyTransactions) {
+    const normalized = normalizeHistoryTransaction(transaction.toObject());
+    const key = normalizeTransactionKey(normalized);
+    seenKeys.add(key);
+    combinedTransactions.push(normalized);
   }
 
-  if (
-    ["pending", "processing", "successful", "failed", "cancelled"].includes(
-      status,
-    )
-  ) {
-    query.status = status;
+  for (const transaction of paymentTransactions) {
+    const normalized = normalizePaymentTransaction(transaction.toObject());
+    const key = normalizeTransactionKey(normalized);
+    if (seenKeys.has(key)) {
+      continue;
+    }
+    seenKeys.add(key);
+    combinedTransactions.push(normalized);
   }
 
-  const [total, transactions] = await Promise.all([
-    PaymentTransaction.countDocuments(query),
-    PaymentTransaction.find(query)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit),
-  ]);
+  for (const transaction of creditTransactions) {
+    const normalized = normalizeCreditPurchaseTransaction(
+      transaction.toObject(),
+    );
+    if (!normalized) {
+      continue;
+    }
+    const key = normalizeTransactionKey(normalized);
+    if (seenKeys.has(key)) {
+      continue;
+    }
+    seenKeys.add(key);
+    combinedTransactions.push(normalized);
+  }
+
+  const filteredTransactions = combinedTransactions.filter((transaction) => {
+    const matchesType =
+      type === "all" ||
+      transaction.category === type ||
+      transaction.type === type;
+    const matchesStatus =
+      status === "all" ||
+      transaction.status === status ||
+      transaction.state === status;
+    return matchesType && matchesStatus;
+  });
+
+  filteredTransactions.sort((left, right) => {
+    const leftTime = new Date(left.createdAt || 0).getTime();
+    const rightTime = new Date(right.createdAt || 0).getTime();
+    return rightTime - leftTime;
+  });
+
+  const total = filteredTransactions.length;
+  const skip = (page - 1) * limit;
+  const transactions = filteredTransactions.slice(skip, skip + limit);
 
   return res.json(
     new ApiResponse(
@@ -564,7 +750,7 @@ export const getMyPaymentTransactions = asyncHandler(async (req, res) => {
         limit,
         hasNextPage: skip + transactions.length < total,
       },
-      "Payment transactions retrieved",
+      "Transaction history retrieved",
     ),
   );
 });

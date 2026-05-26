@@ -5,6 +5,7 @@ import Listing from "../models/Listing.js";
 import ShareOwnership from "../models/ShareOwnership.js";
 import User from "../models/User.js";
 import { ApiError } from "../utils/ApiError.js";
+import { recordTransactionHistory } from "./transactionHistory.service.js";
 
 const roundBirr = (value) =>
   Math.round((Number(value) + Number.EPSILON) * 100) / 100;
@@ -118,6 +119,35 @@ export const refundListingInvestments = async (
 
       if (userWalletOps.length > 0) {
         await User.bulkWrite(userWalletOps, withSession(session));
+      }
+
+      const refundEntries = Array.from(refundByInvestor.entries()).map(
+        ([investorId, amount]) => ({
+          user: investorId,
+          category: "refund",
+          direction: "credit",
+          amountBirr: amount,
+          status: "successful",
+          title: "Automatic Investment Refund",
+          description: `Automatic refund for listing ${
+            listing.pitchTitle || listing._id
+          }`,
+          sourceModel: "Listing",
+          sourceId: listing._id,
+          referenceCode: String(listing._id),
+          metadata: {
+            reason,
+            listingId: listing._id,
+          },
+        }),
+      );
+
+      if (refundEntries.length > 0) {
+        await Promise.all(
+          refundEntries.map((entry) =>
+            recordTransactionHistory(entry, session),
+          ),
+        );
       }
 
       await User.findByIdAndUpdate(
@@ -347,6 +377,31 @@ export const approveInvestorRefundRequest = async (
     refundRequest.refundedShares = refundedShares;
     refundRequest.refundedContractCount = contracts.length;
     await refundRequest.save(withSession(session));
+
+    await recordTransactionHistory(
+      {
+        user: refundRequest.investor,
+        category: "refund",
+        direction: "credit",
+        amountBirr: refundedAmountBirr,
+        status: "successful",
+        title: "Investment Refund",
+        description: `Refund approved for ${refundedShares} share(s) on listing ${
+          listing.pitchTitle || listing._id
+        }`,
+        sourceModel: "InvestorRefundRequest",
+        sourceId: refundRequest._id,
+        referenceCode: String(refundRequest._id),
+        metadata: {
+          listingId: listing._id,
+          farmerId: listing.farmer,
+          refundedShares,
+          refundedContractCount: contracts.length,
+          approvedBy: adminId || null,
+        },
+      },
+      session,
+    );
 
     return {
       requestId: String(refundRequest._id),

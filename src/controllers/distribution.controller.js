@@ -6,6 +6,7 @@ import Listing from "../models/Listing.js";
 import InvestmentContract from "../models/InvestmentContract.js";
 import User from "../models/User.js";
 import { refundListingInvestments } from "../services/refund.service.js";
+import { recordTransactionHistory } from "../services/transactionHistory.service.js";
 import {
   getAllHolders,
   closeSharesAfterDistribution,
@@ -93,6 +94,26 @@ export const distributeProfits = asyncHandler(async (req, res) => {
       $inc: { walletBalance: amount },
     });
 
+    await recordTransactionHistory({
+      user: holder.investor._id,
+      category: "distribution_payout",
+      direction: "credit",
+      amountBirr: amount,
+      status: "successful",
+      title: "Profit Distribution",
+      description: `Distribution payout from "${
+        listing.pitchTitle || "listing"
+      }"`,
+      sourceModel: "Listing",
+      sourceId: listing._id,
+      referenceCode: String(listing._id),
+      metadata: {
+        farmerId: req.user._id,
+        investorShares: holderShares,
+        totalDistributedBirr: investorShareTotalBirr,
+      },
+    });
+
     distributionMap[holder.investor._id.toString()] = amount;
     totalDistributed = roundBirr(totalDistributed + amount);
 
@@ -106,6 +127,26 @@ export const distributeProfits = asyncHandler(async (req, res) => {
   // Debit farmer (he pays the committed amount even if actual < expected)
   await User.findByIdAndUpdate(req.user._id, {
     $inc: { walletBalance: -totalDistributed },
+  });
+
+  await recordTransactionHistory({
+    user: req.user._id,
+    category: "distribution_payout",
+    direction: "debit",
+    amountBirr: totalDistributed,
+    status: "successful",
+    title: "Investor Profit Distribution",
+    description: `Profit distribution paid out to investors for "${
+      listing.pitchTitle || "listing"
+    }"`,
+    sourceModel: "Listing",
+    sourceId: listing._id,
+    referenceCode: String(listing._id),
+    metadata: {
+      investorCount: eligibleHolders.length,
+      distributionMap,
+      investorShareTotalBirr,
+    },
   });
 
   // Close listing
