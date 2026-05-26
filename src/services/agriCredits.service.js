@@ -2,6 +2,7 @@ import User from "../models/User.js";
 import CreditTransaction from "../models/CreditTransaction.js";
 import { ApiError } from "../utils/ApiError.js";
 import { createNotificationSafe } from "./notification.service.js";
+import { recordTransactionHistory } from "./transactionHistory.service.js";
 
 const MONTHLY_FREE = 40;
 const SIGNUP_BONUS = 60;
@@ -220,6 +221,27 @@ export async function purchaseBundle(userId, bundleKey) {
     amount: bundle.credits,
     balanceAfter: newCredits,
     description: `${bundle.name} purchased (${bundle.credits} credits for ${bundle.priceBirr} Birr)`,
+  });
+
+  await recordTransactionHistory({
+    user: user._id,
+    category: "agri_credit_purchase",
+    direction: "debit",
+    amountBirr: bundle.priceBirr,
+    status: "successful",
+    title: "AgriCredits Purchase",
+    description: `${bundle.name} purchased (${bundle.credits} credits for ${bundle.priceBirr} Birr)`,
+    sourceModel: "CreditTransaction",
+    sourceId: tx._id,
+    referenceCode: String(tx._id),
+    metadata: {
+      bundleKey,
+      bundleName: bundle.name,
+      creditsAdded: bundle.credits,
+      priceBirr: bundle.priceBirr,
+      newCreditsBalance: newCredits,
+      newWalletBalance: user.walletBalance,
+    },
   });
 
   await createNotificationSafe({

@@ -13,6 +13,7 @@ import ShareOwnership from "../models/ShareOwnership.js";
 import InvestorRefundRequest from "../models/InvestorRefundRequest.js";
 import { createNotificationSafe } from "../services/notification.service.js";
 import { approveInvestorRefundRequest } from "../services/refund.service.js";
+import { recordTransactionHistory } from "../services/transactionHistory.service.js";
 
 const roundBirr = (value) =>
   Math.round((Number(value) + Number.EPSILON) * 100) / 100;
@@ -210,6 +211,29 @@ export const buyInvestmentShares = asyncHandler(async (req, res) => {
 
       fundsReleased = true;
 
+      await recordTransactionHistory(
+        {
+          user: listing.farmer,
+          category: "fund_release",
+          direction: "credit",
+          amountBirr: releasedAmountBirr,
+          status: "successful",
+          title: "Funds Released to Main Wallet",
+          description: `Escrow funds released for "${
+            listing.pitchTitle || "investment listing"
+          }"`,
+          sourceModel: "Listing",
+          sourceId: listing._id,
+          referenceCode: String(listing._id),
+          metadata: {
+            releasedFrom: "fundWalletBalance",
+            releasedTo: "walletBalance",
+            goalReached: true,
+          },
+        },
+        session,
+      );
+
       await createNotificationSafe({
         recipient: listing.farmer,
         type: "listing_goal_reached",
@@ -229,6 +253,29 @@ export const buyInvestmentShares = asyncHandler(async (req, res) => {
     }
 
     await listing.save(withSession(session));
+
+    await recordTransactionHistory(
+      {
+        user: req.user._id,
+        category: "share_purchase",
+        direction: "debit",
+        amountBirr: costBirr,
+        status: "successful",
+        title: "Share Purchase",
+        description: `${requestedShares} share(s) purchased from ${
+          listing.pitchTitle || "listing"
+        }`,
+        sourceModel: "InvestmentContract",
+        sourceId: contract._id,
+        referenceCode: contract.contractNumber,
+        metadata: {
+          listingId: listing._id,
+          farmerId: listing.farmer,
+          sharesPurchased: requestedShares,
+        },
+      },
+      session,
+    );
 
     await createNotificationSafe({
       recipient: listing.farmer,
