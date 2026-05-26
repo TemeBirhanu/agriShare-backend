@@ -755,6 +755,117 @@ export const getMyPaymentTransactions = asyncHandler(async (req, res) => {
   );
 });
 
+export const getMyPaymentTransactionStats = asyncHandler(async (req, res) => {
+  const userId = new mongoose.Types.ObjectId(req.user._id);
+
+  const [historyStats, paymentStats] = await Promise.all([
+    TransactionHistory.aggregate([
+      {
+        $match: {
+          user: userId,
+          category: { $in: ["deposit", "withdrawal"] },
+          status: "successful",
+        },
+      },
+      {
+        $project: {
+          category: 1,
+          amountBirr: 1,
+          sourceModel: 1,
+          sourceId: 1,
+          referenceCode: 1,
+          createdAt: 1,
+        },
+      },
+    ]),
+    PaymentTransaction.aggregate([
+      {
+        $match: {
+          user: userId,
+          type: { $in: ["deposit", "withdrawal"] },
+          status: "successful",
+        },
+      },
+      {
+        $project: {
+          category: "$type",
+          amountBirr: 1,
+          sourceModel: { $literal: "PaymentTransaction" },
+          sourceId: "$_id",
+          referenceCode: "$txRef",
+          createdAt: 1,
+        },
+      },
+    ]),
+  ]);
+
+  const seenKeys = new Set();
+  const combinedStats = [];
+
+  for (const transaction of historyStats) {
+    const key = normalizeTransactionKey(transaction);
+    if (seenKeys.has(key)) {
+      continue;
+    }
+    seenKeys.add(key);
+    combinedStats.push(transaction);
+  }
+
+  for (const transaction of paymentStats) {
+    const key = normalizeTransactionKey(transaction);
+    if (seenKeys.has(key)) {
+      continue;
+    }
+    seenKeys.add(key);
+    combinedStats.push(transaction);
+  }
+
+  const summary = {
+    deposits: {
+      totalAmountBirr: 0,
+      transactionCount: 0,
+    },
+    withdrawals: {
+      totalAmountBirr: 0,
+      transactionCount: 0,
+    },
+  };
+
+  for (const item of combinedStats) {
+    if (item.category === "deposit") {
+      summary.deposits = {
+        totalAmountBirr: roundBirr(
+          summary.deposits.totalAmountBirr + Number(item.amountBirr || 0),
+        ),
+        transactionCount: summary.deposits.transactionCount + 1,
+      };
+    }
+
+    if (item.category === "withdrawal") {
+      summary.withdrawals = {
+        totalAmountBirr: roundBirr(
+          summary.withdrawals.totalAmountBirr + Number(item.amountBirr || 0),
+        ),
+        transactionCount: summary.withdrawals.transactionCount + 1,
+      };
+    }
+  }
+
+  return res.json(
+    new ApiResponse(
+      200,
+      {
+        ...summary,
+        netAmountBirr: roundBirr(
+          summary.deposits.totalAmountBirr -
+            summary.withdrawals.totalAmountBirr,
+        ),
+      },
+      "Transaction stats retrieved",
+    ),
+  );
+});
+
 export const getAdminPaymentTransactions = asyncHandler(async (req, res) => {
   if (req.user.role !== "admin") {
     throw new ApiError(403, "Only admins can view payment transactions");

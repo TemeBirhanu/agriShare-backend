@@ -5,6 +5,7 @@ import {
   verifyDepositByTxRef,
   handleChapaWebhook,
   requestWithdrawal,
+  getMyPaymentTransactionStats,
   getMyPaymentTransactions,
   getAdminPaymentTransactions,
 } from "../controllers/payment.controller.js";
@@ -15,6 +16,7 @@ router.post("/deposits/initiate", protect, initiateDeposit);
 router.get("/deposits/verify/:txRef", protect, verifyDepositByTxRef);
 router.post("/webhook/chapa", handleChapaWebhook);
 router.post("/withdrawals/request", protect, requestWithdrawal);
+router.get("/me/transactions/stats", protect, getMyPaymentTransactionStats);
 router.get("/me/transactions", protect, getMyPaymentTransactions);
 router.get(
   "/admin/transactions",
