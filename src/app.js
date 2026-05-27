@@ -68,9 +68,9 @@ app.use("/api/payments", paymentRoutes);
 // Health check
 app.get("/", (req, res) => {
   res.json({
-    message: "🚀 AgriShare Backend is running!",
+    message: "AgriShare Backend is running!",
     version: "1.0.0",
-    blockchain: "Polygon Amoy Testnet (ready)",
+    environment: process.env.NODE_ENV || "development",
   });
 });
 
