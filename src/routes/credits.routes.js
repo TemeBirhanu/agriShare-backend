@@ -20,10 +20,12 @@ router.get(
   "/history",
   protect,
   asyncHandler(async (req, res) => {
-    const transactions = await CreditTransaction.find({ user: req.user._id })
+    const transactions = await CreditTransaction.find({
+      user: req.user._id,
+      type: { $nin: ["deposit", "withdrawal"] },
+    })
       .sort({ createdAt: -1 })
       .limit(50);
-
     res.json(new ApiResponse(200, { transactions }, "Credit history"));
   }),
 );
