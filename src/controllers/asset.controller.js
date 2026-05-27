@@ -6,7 +6,6 @@ import {
   createNotificationSafe,
   notifyRoleSafe,
 } from "../services/notification.service.js";
-// import { mintNFT } from "../services/blockchain.service.js"; // Assuming blockchain service is updated too or will be
 
 const parseMaybeJson = (value) => {
   if (typeof value !== "string") {
