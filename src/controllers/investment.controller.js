@@ -367,7 +367,10 @@ export const getMyActiveInvestments = asyncHandler(async (req, res) => {
       const investment = await InvestmentContract.findOne({
         investor: req.user._id,
         listing: item.listing?._id,
-      });
+      })
+        .populate("farmer", "firstName lastName")
+        .populate("listing", "pitchTitle")
+        .populate("investor", "firstName lastName");
 
       return {
         ...item.toObject(),
@@ -407,7 +410,10 @@ export const getMyHistory = asyncHandler(async (req, res) => {
       const investment = await InvestmentContract.findOne({
         investor: req.user._id,
         listing: item.listing?._id,
-      });
+      })
+        .populate("farmer", "firstName lastName")
+        .populate("listing", "pitchTitle")
+        .populate("investor", "firstName lastName");
 
       return {
         ...item.toObject(),
