@@ -348,7 +348,6 @@ export const verifyDepositByTxRef = asyncHandler(async (req, res) => {
   */
 
   if (!verification.isSuccessful) {
-    console.log("FAiled verification");
     if (payment.status !== "successful") {
       payment.status = "failed";
       payment.failureReason =
@@ -380,7 +379,6 @@ export const verifyDepositByTxRef = asyncHandler(async (req, res) => {
   } finally {
     await session.endSession();
   }
-  console.log(settlement, "settlement", {
     payment: settlement.payment,
     walletBalance: settlement.walletBalance,
     alreadySettled: settlement.alreadySettled,

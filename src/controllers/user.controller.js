@@ -137,7 +137,6 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
     throw new ApiError(404, "User not found");
   }
   const profilePicture = req.file ? req.file.path : undefined;
-  console.log("Received profile picture file:", req.file, profilePicture);
   const allowedFields = [
     "firstName",
     "lastName",

@@ -378,7 +378,6 @@ export const getMyActiveInvestments = asyncHandler(async (req, res) => {
       };
     }),
   );
-  console.log("Active investments retrieved:", investments);
   res.json(
     new ApiResponse(
       200,

@@ -41,14 +41,14 @@ const normalizeLocation = (body) => {
     return parsedLocation;
   }
 
-  const parsedGps = parseMaybeJson(body.gps);
+  // const parsedGps = parseMaybeJson(body.gps);
 
   return {
     kebele: body.kebele,
     woreda: body.woreda,
     zone: body.zone,
     region: body.region,
-    ...(parsedGps && typeof parsedGps === "object" ? { gps: parsedGps } : {}),
+    // ...(parsedGps && typeof parsedGps === "object" ? { gps: parsedGps } : {}),
   };
 };
 
@@ -233,8 +233,6 @@ const verifyAsset = asyncHandler(async (req, res) => {
 
   const { id } = req.params;
   const { status, comment } = req.body;
-  console.log(req.body, "🔥");
-  // status: 'verified' or 'rejected', comment optional
 
   if (!["verified", "rejected"].includes(status)) {
     throw new ApiError(400, 'Status must be "verified" or "rejected"');
@@ -255,7 +253,6 @@ const verifyAsset = asyncHandler(async (req, res) => {
   asset.verifiedAt = new Date();
 
   await asset.save();
-  console.log(asset, "💥");
   await createNotificationSafe({
     recipient: asset.farmer,
     type: "asset_verification",
@@ -340,7 +337,6 @@ const resubmitRejectedAsset = asyncHandler(async (req, res) => {
     files: req.files,
     existingAsset: asset,
   });
-
   asset.name = nextAssetData.name;
   asset.description = nextAssetData.description;
   asset.location = nextAssetData.location;

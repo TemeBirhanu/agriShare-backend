@@ -31,10 +31,6 @@ const backfillInvestorVerification = async () => {
         },
       },
     );
-
-    console.log("Investor verification backfill completed");
-    console.log(`Matched: ${result.matchedCount}`);
-    console.log(`Modified: ${result.modifiedCount}`);
   } catch (error) {
     console.error("Investor verification backfill failed:", error.message);
     process.exitCode = 1;

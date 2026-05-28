@@ -184,7 +184,6 @@ export const verifyChapaTransaction = async (txRef) => {
     "paid",
     "pending",
   ].includes(paymentStatus);
-  console.log({ paymentStatus, isSuccessful });
   return {
     response,
     paymentStatus,
