@@ -21,6 +21,7 @@ import creditsRoutes from "./routes/credits.routes.js";
 import farmerVerificationRoutes from "./routes/farmerVerification.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import paymentRoutes from "./routes/payment.routes.js";
+import platformRoutes from "./routes/platform.routes.js";
 import {
   startFundingLifecycleScheduler,
   stopFundingLifecycleScheduler,
@@ -64,6 +65,7 @@ app.use("/api/credits", creditsRoutes);
 app.use("/api/farmer-verifications", farmerVerificationRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/platform", platformRoutes);
 
 // Health check
 app.get("/", (req, res) => {
