@@ -26,7 +26,9 @@ const getFundingMetrics = async (listingDoc) => {
   });
   return {
     ...listing,
-    investorsCount: sharesPurchasedByInvestorShareOwnership.length,
+    investorsCount: sharesPurchasedByInvestorShareOwnership.filter(
+      (s) => s.status !== "refunded",
+    ).length,
     investmentProgressPercent: Number(progressPercent.toFixed(2)),
     fundingRemainingBirr: Number(Math.max(goal - invested, 0).toFixed(2)),
     isDeadlinePassed: listing.investmentDeadline

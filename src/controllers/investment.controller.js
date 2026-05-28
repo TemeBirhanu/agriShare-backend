@@ -377,7 +377,7 @@ export const getMyHistory = asyncHandler(async (req, res) => {
         "investmentGoalBirr expectedTotalYieldBirr sharePricePerTokenBirr",
       populate: {
         path: "asset",
-        select: "name photos",
+        select: "name photos type",
       },
     })
     .sort({ purchasedAt: -1 });
