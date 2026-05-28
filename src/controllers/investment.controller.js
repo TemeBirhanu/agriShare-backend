@@ -354,15 +354,35 @@ export const getMyActiveInvestments = asyncHandler(async (req, res) => {
     .populate({
       path: "listing",
       select:
-        "investmentGoalBirr totalInvestedBirr sharesToSellPercent expectedTotalYieldBirr paydayDate effectivePaydayDate investmentDeadline status sharePricePerTokenBirr",
+        "investmentGoalBirr totalInvestedBirr sharesToSellPercent expectedTotalYieldBirr paydayDate effectivePaydayDate investmentDeadline status sharePricePerTokenBirr pitchText pitchTitle",
       populate: {
         path: "asset",
         select: "name type photos",
       },
     })
     .sort({ purchasedAt: -1 });
+
+  const investmentsWithContracts = await Promise.all(
+    investments.map(async (item) => {
+      const investment = await InvestmentContract.findOne({
+        investor: req.user._id,
+        listing: item.listing?._id,
+      });
+
+      return {
+        ...item.toObject(),
+        investment,
+      };
+    }),
+  );
   console.log("Active investments retrieved:", investments);
-  res.json(new ApiResponse(200, { investments }, "Active investments"));
+  res.json(
+    new ApiResponse(
+      200,
+      { investments: investmentsWithContracts },
+      "Active investments",
+    ),
+  );
 });
 
 // My investment history (completed)
@@ -374,7 +394,7 @@ export const getMyHistory = asyncHandler(async (req, res) => {
     .populate({
       path: "listing",
       select:
-        "investmentGoalBirr expectedTotalYieldBirr sharePricePerTokenBirr",
+        "investmentGoalBirr expectedTotalYieldBirr sharePricePerTokenBirr pitchText pitchTitle",
       populate: {
         path: "asset",
         select: "name photos type",
@@ -382,7 +402,27 @@ export const getMyHistory = asyncHandler(async (req, res) => {
     })
     .sort({ purchasedAt: -1 });
 
-  res.json(new ApiResponse(200, { history }, "Investment history"));
+  const historyWithInvestment = await Promise.all(
+    history.map(async (item) => {
+      const investment = await InvestmentContract.findOne({
+        investor: req.user._id,
+        listing: item.listing?._id,
+      });
+
+      return {
+        ...item.toObject(),
+        investment,
+      };
+    }),
+  );
+
+  res.json(
+    new ApiResponse(
+      200,
+      { history: historyWithInvestment },
+      "Investment history",
+    ),
+  );
 });
 
 // Farmer: all investments in my listings

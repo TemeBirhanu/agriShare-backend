@@ -232,7 +232,9 @@ const verifyAsset = asyncHandler(async (req, res) => {
   }
 
   const { id } = req.params;
-  const { status, comment } = req.body; // status: 'verified' or 'rejected', comment optional
+  const { status, comment } = req.body;
+  console.log(req.body, "🔥");
+  // status: 'verified' or 'rejected', comment optional
 
   if (!["verified", "rejected"].includes(status)) {
     throw new ApiError(400, 'Status must be "verified" or "rejected"');
@@ -253,7 +255,7 @@ const verifyAsset = asyncHandler(async (req, res) => {
   asset.verifiedAt = new Date();
 
   await asset.save();
-
+  console.log(asset, "💥");
   await createNotificationSafe({
     recipient: asset.farmer,
     type: "asset_verification",
