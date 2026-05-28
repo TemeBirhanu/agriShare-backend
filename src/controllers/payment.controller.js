@@ -583,26 +583,23 @@ export const requestWithdrawal = asyncHandler(async (req, res) => {
         referenceModel: "PaymentTransaction",
       });
 
-      await recordTransactionHistory(
-        {
-          user: req.user._id,
-          category: "withdrawal",
-          direction: "debit",
-          amountBirr,
-          status: "successful",
-          title: "Wallet Withdrawal",
-          description: `Wallet withdrawal to bank (${bankCode})`,
-          sourceModel: "PaymentTransaction",
-          sourceId: payment._id,
-          referenceCode: txRef,
-          metadata: {
-            provider: payment.provider,
-            bankCode,
-            bankName,
-          },
+      await recordTransactionHistory({
+        user: req.user._id,
+        category: "withdrawal",
+        direction: "debit",
+        amountBirr,
+        status: "successful",
+        title: "Wallet Withdrawal",
+        description: `Wallet withdrawal to bank (${bankCode})`,
+        sourceModel: "PaymentTransaction",
+        sourceId: payment._id,
+        referenceCode: txRef,
+        metadata: {
+          provider: payment.provider,
+          bankCode,
+          bankName,
         },
-        session,
-      );
+      });
 
       await createNotificationSafe({
         recipient: req.user._id,
