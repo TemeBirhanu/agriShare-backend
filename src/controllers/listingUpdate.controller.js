@@ -22,11 +22,11 @@ const ensureListingOwner = (listing, userId) => {
 };
 
 const ensureBeforePayday = (listing) => {
-  if (!listing?.paydayDate) {
+  if (listing.payoutMode === "fixed" && !listing?.paydayDate) {
     throw new ApiError(400, "Listing payday date is missing");
   }
-
-  if (new Date() >= new Date(listing.paydayDate)) {
+  const payday = listing.payoutMode === "fixed" ? new Date(listing.paydayDate) : null;
+  if (new Date() >= payday) {
     throw new ApiError(
       400,
       "Updates can be edited or deleted only before the listing payday",
@@ -73,22 +73,22 @@ export const createListingUpdate = asyncHandler(async (req, res) => {
   if (!title) {
     throw new ApiError(400, "Update title is required");
   }
-  if (title.length < 5 || title.length > 120) {
-    throw new ApiError(
-      400,
-      "Update title must be between 5 and 120 characters",
-    );
-  }
+  // if (title.length < 5 || title.length > 120) {
+  //   throw new ApiError(
+  //     400,
+  //     "Update title must be between 5 and 120 characters",
+  //   );
+  // }
 
   if (!body) {
     throw new ApiError(400, "Update body is required");
   }
-  if (body.length < 20 || body.length > 3000) {
-    throw new ApiError(
-      400,
-      "Update body must be between 20 and 3000 characters",
-    );
-  }
+  // if (body.length < 20 || body.length > 3000) {
+  //   throw new ApiError(
+  //     400,
+  //     "Update body must be between 20 and 3000 characters",
+  //   );
+  // }
 
   const images = mapUpdateImages(req.files);
   if (images.length > 3) {
