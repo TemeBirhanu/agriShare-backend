@@ -379,10 +379,7 @@ export const verifyDepositByTxRef = asyncHandler(async (req, res) => {
   } finally {
     await session.endSession();
   }
-    payment: settlement.payment,
-    walletBalance: settlement.walletBalance,
-    alreadySettled: settlement.alreadySettled,
-  });
+
   return res.json(
     new ApiResponse(
       200,
